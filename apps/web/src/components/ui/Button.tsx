@@ -1,11 +1,13 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 
 import { Spinner } from './Spinner';
 
 type ButtonVariant = 'primary' | 'secondary' | 'outline-danger' | 'ghost';
 type ButtonSize = 'sm' | 'md';
 
-interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+// ComponentProps<'button'> (not ButtonHTMLAttributes) so `ref` is accepted and
+// carried through the {...rest} spread onto the DOM button (React 19 ref-as-prop).
+interface ButtonProps extends ComponentProps<'button'> {
   variant?: ButtonVariant;
   size?: ButtonSize;
   isLoading?: boolean;

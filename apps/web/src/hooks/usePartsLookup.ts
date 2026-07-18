@@ -14,6 +14,8 @@ interface UsePartsLookupResult {
   error: unknown;
 }
 
+const EMPTY_PARTS: Map<number, Part> = new Map();
+
 // Stock transactions carry only a partId, so screens that list transactions across
 // parts (dashboard recent movements, the transactions ledger) need a sku/name lookup.
 // Fetches the first 100 parts once; fine for this catalog's scale, but a catalog that
@@ -25,5 +27,5 @@ export function usePartsLookup(): UsePartsLookupResult {
   );
   const { data, isLoading, error } = useAsync(fetcher);
 
-  return { partsById: data ?? new Map(), isLoading, error };
+  return { partsById: data ?? EMPTY_PARTS, isLoading, error };
 }

@@ -11,7 +11,7 @@ export const manufacturerSchema = z.object({
 export type Manufacturer = z.infer<typeof manufacturerSchema>;
 
 export const manufacturerCreateSchema = z.object({
-  name: z.string(),
+  name: z.string().min(1, 'name must not be empty'),
   code: z.string().nullable().optional(),
 });
 export type ManufacturerCreate = z.infer<typeof manufacturerCreateSchema>;

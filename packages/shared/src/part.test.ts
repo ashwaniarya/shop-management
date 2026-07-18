@@ -4,6 +4,17 @@ import { describe, expect, it } from 'vitest';
 import { partCreateSchema, partUpdateSchema } from './part';
 
 describe('partCreateSchema', () => {
+  it('rejects an empty name', () => {
+    const result = partCreateSchema.safeParse({
+      sku: 'SKU-1',
+      manufacturerId: 1,
+      manufacturerPartNumber: 'MPN-1',
+      name: '',
+      categoryId: 1,
+    });
+    expect(result.success).toBe(false);
+  });
+
   it('defaults unitOfMeasure to piece when omitted', () => {
     const result = partCreateSchema.parse({
       sku: 'SKU-1',

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { describeError } from '@/lib/describeError';
 
@@ -20,10 +20,23 @@ export function ConfirmButton({
 }) {
   const [state, setState] = useState<ConfirmState>('idle');
   const [error, setError] = useState<string | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const shouldRestoreTriggerFocusRef = useRef(false);
+
+  // Mirror of the confirm-path autoFocus below: cancelling unmounts the confirming
+  // pair and remounts the trigger, so focus is restored to it explicitly. Gated on
+  // the flag so the initial mount never steals focus.
+  useEffect(() => {
+    if (state === 'idle' && shouldRestoreTriggerFocusRef.current) {
+      shouldRestoreTriggerFocusRef.current = false;
+      triggerRef.current?.focus();
+    }
+  }, [state]);
 
   if (state === 'idle') {
     return (
       <Button
+        ref={triggerRef}
         variant="ghost"
         size="sm"
         onClick={() => {
@@ -57,7 +70,15 @@ export function ConfirmButton({
       >
         {confirmLabel}
       </Button>
-      <Button variant="ghost" size="sm" disabled={state === 'pending'} onClick={() => setState('idle')}>
+      <Button
+        variant="ghost"
+        size="sm"
+        disabled={state === 'pending'}
+        onClick={() => {
+          shouldRestoreTriggerFocusRef.current = true;
+          setState('idle');
+        }}
+      >
         Cancel
       </Button>
       <FormError error={error} />

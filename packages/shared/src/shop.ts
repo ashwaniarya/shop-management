@@ -13,7 +13,7 @@ export const shopSchema = z.object({
 export type Shop = z.infer<typeof shopSchema>;
 
 export const shopCreateSchema = z.object({
-  name: z.string(),
+  name: z.string().min(1, 'name must not be empty'),
   address: z.string().nullable().optional(),
   phone: z.string().nullable().optional(),
   gstin: z.string().nullable().optional(),

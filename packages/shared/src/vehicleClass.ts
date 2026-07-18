@@ -11,7 +11,7 @@ export const vehicleClassSchema = z.object({
 export type VehicleClass = z.infer<typeof vehicleClassSchema>;
 
 export const vehicleClassCreateSchema = z.object({
-  name: z.string(),
+  name: z.string().min(1, 'name must not be empty'),
   displayOrder: z.number().int().optional(),
 });
 export type VehicleClassCreate = z.infer<typeof vehicleClassCreateSchema>;

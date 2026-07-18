@@ -17,10 +17,10 @@ export const partSchema = z.object({
 export type Part = z.infer<typeof partSchema>;
 
 export const partCreateSchema = z.object({
-  sku: z.string(),
+  sku: z.string().min(1, 'sku must not be empty'),
   manufacturerId: z.number().int(),
-  manufacturerPartNumber: z.string(),
-  name: z.string(),
+  manufacturerPartNumber: z.string().min(1, 'manufacturerPartNumber must not be empty'),
+  name: z.string().min(1, 'name must not be empty'),
   categoryId: z.number().int(),
   description: z.string().nullable().optional(),
   unitOfMeasure: z.string().default('piece'),

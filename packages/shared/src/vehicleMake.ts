@@ -10,7 +10,7 @@ export const vehicleMakeSchema = z.object({
 export type VehicleMake = z.infer<typeof vehicleMakeSchema>;
 
 export const vehicleMakeCreateSchema = z.object({
-  name: z.string(),
+  name: z.string().min(1, 'name must not be empty'),
 });
 export type VehicleMakeCreate = z.infer<typeof vehicleMakeCreateSchema>;
 

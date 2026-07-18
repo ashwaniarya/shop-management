@@ -22,3 +22,15 @@ describe('GET /docs', () => {
     expect(response.text).toContain('swagger-ui');
   });
 });
+
+// Behavioural test: the CORS allowlist grants only origins from ALLOWED_ORIGINS
+// (defaulting to the local web app when unset)
+describe('CORS allowlist', () => {
+  it('grants the allowed origin an ACAO header and withholds it from others', async () => {
+    const allowedResponse = await request(app).get('/health').set('Origin', 'http://localhost:3000');
+    expect(allowedResponse.headers['access-control-allow-origin']).toBe('http://localhost:3000');
+
+    const disallowedResponse = await request(app).get('/health').set('Origin', 'https://evil.example.com');
+    expect(disallowedResponse.headers['access-control-allow-origin']).toBeUndefined();
+  });
+});

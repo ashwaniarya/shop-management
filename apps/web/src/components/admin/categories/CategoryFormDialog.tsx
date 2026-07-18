@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-import { FormActions } from '@/components/admin/FormActions';
+import { FormActions } from '@/components/ui/FormActions';
 import { Dialog } from '@/components/ui/Dialog';
 import { Input } from '@/components/ui/Input';
 import { useZodSubmit } from '@/hooks/useZodSubmit';

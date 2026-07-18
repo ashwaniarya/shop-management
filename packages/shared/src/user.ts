@@ -17,7 +17,7 @@ export const userSchema = z.object({
 export type User = z.infer<typeof userSchema>;
 
 export const userCreateSchema = z.object({
-  name: z.string(),
+  name: z.string().min(1, 'name must not be empty'),
   phone: z.string().nullable().optional(),
   email: z.string().nullable().optional(),
   role: userRoleSchema,

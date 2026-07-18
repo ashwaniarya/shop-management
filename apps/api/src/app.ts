@@ -16,9 +16,19 @@ import { stockTransactionsRouter } from './routes/stockTransactions';
 import { suppliersRouter } from './routes/suppliers';
 import { vehiclesRouter } from './routes/vehicles';
 
+function parseAllowedOrigins(rawAllowedOrigins: string | undefined): string[] {
+  if (!rawAllowedOrigins) {
+    return ['http://localhost:3000'];
+  }
+  return rawAllowedOrigins
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin !== '');
+}
+
 export const app = express();
 
-app.use(cors());
+app.use(cors({ origin: parseAllowedOrigins(process.env.ALLOWED_ORIGINS) }));
 app.use(express.json());
 
 app.get('/health', (_req, res) => {

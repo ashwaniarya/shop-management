@@ -1,5 +1,5 @@
-import { Button } from '@/components/ui/Button';
-import { FormError } from '@/components/ui/FormError';
+import { Button } from './Button';
+import { FormError } from './FormError';
 
 interface FormActionsProps {
   submitLabel: string;

@@ -16,7 +16,7 @@ export const supplierSchema = z.object({
 export type Supplier = z.infer<typeof supplierSchema>;
 
 export const supplierCreateSchema = z.object({
-  name: z.string(),
+  name: z.string().min(1, 'name must not be empty'),
   contactPerson: z.string().nullable().optional(),
   phone: z.string().nullable().optional(),
   email: z.string().nullable().optional(),

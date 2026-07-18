@@ -9,7 +9,7 @@ export const categorySchema = z.object({
 export type Category = z.infer<typeof categorySchema>;
 
 export const categoryCreateSchema = z.object({
-  name: z.string(),
+  name: z.string().min(1, 'name must not be empty'),
   parentCategoryId: z.number().int().nullable().optional(),
   displayOrder: z.number().int().optional(),
 });
