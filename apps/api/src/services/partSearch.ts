@@ -45,6 +45,9 @@ export async function searchPartsByNumber(rawNumber: string): Promise<PartNumber
     results.push({ part, matchedBy: 'MPN', matchedNumber: part.manufacturerPartNumber });
   }
 
+  // notIn only excludes parts matched by earlier sources; a part can carry several
+  // cross-reference rows normalizing to the same number, so the has() re-check below
+  // dedupes within this batch (SKU/MPN queries return one row per part, so notIn suffices there).
   const crossReferenceMatches = await prisma.partCrossReference.findMany({
     where: { refNumberNormalized: normalized, partId: { notIn: [...matchedPartIds] } },
     include: { part: { include: partWithCatalogRelationsInclude } },

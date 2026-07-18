@@ -56,20 +56,32 @@ export async function appendStockTransaction(
     type === StockTransactionType.SALE ? new Prisma.Decimal(quantity).negated() : new Prisma.Decimal(quantity);
 
   return prisma.$transaction(async (tx) => {
-    let inventoryItem = await tx.inventoryItem.findUnique({
+    // Seed the row so the guarded update always has a target, and so the
+    // unique (shopId, partId) index — not a lost INSERT — arbitrates a
+    // concurrent first-ever transaction for this part.
+    await tx.inventoryItem.upsert({
+      where: { shopId_partId: { shopId, partId } },
+      create: { shopId, partId, quantityOnHand: 0 },
+      update: {},
+    });
+
+    // Atomic guard + mutation: under READ COMMITTED the WHERE re-evaluates
+    // against the latest committed quantity, so a concurrent sale cannot
+    // pass the non-negative check on a stale read.
+    const applied = await tx.inventoryItem.updateMany({
+      where: { shopId, partId, quantityOnHand: { gte: signedQuantity.negated() } },
+      data: { quantityOnHand: { increment: signedQuantity } },
+    });
+
+    const inventoryItem = await tx.inventoryItem.findUniqueOrThrow({
       where: { shopId_partId: { shopId, partId } },
     });
 
-    if (!inventoryItem) {
-      inventoryItem = await tx.inventoryItem.create({
-        data: { shopId, partId, quantityOnHand: 0 },
-      });
-    }
-
-    const newQuantity = inventoryItem.quantityOnHand.plus(signedQuantity);
-
-    if (newQuantity.lessThan(0)) {
-      throw new InsufficientStockError(inventoryItem.quantityOnHand.toNumber(), signedQuantity.abs().toNumber());
+    if (applied.count === 0) {
+      throw new InsufficientStockError(
+        inventoryItem.quantityOnHand.toNumber(),
+        signedQuantity.abs().toNumber(),
+      );
     }
 
     const transaction = await tx.stockTransaction.create({
@@ -84,12 +96,7 @@ export async function appendStockTransaction(
       },
     });
 
-    const updatedInventoryItem = await tx.inventoryItem.update({
-      where: { id: inventoryItem.id },
-      data: { quantityOnHand: newQuantity },
-    });
-
-    return { transaction, inventoryItem: updatedInventoryItem };
+    return { transaction, inventoryItem };
   });
 }
 
@@ -147,7 +154,7 @@ export async function getTransactionsSummary(
     select: { quantity: true, unitPrice: true },
   });
   const cost = purchaseRows.reduce(
-    (sum, row) => sum.plus(row.quantity.times(row.unitPrice ?? new Prisma.Decimal(0))),
+    (sum, row) => sum.plus(row.quantity.abs().times(row.unitPrice ?? new Prisma.Decimal(0))),
     new Prisma.Decimal(0),
   );
 

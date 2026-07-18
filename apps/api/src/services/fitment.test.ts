@@ -1,10 +1,10 @@
 // Behavioural test: exercises the fitment specificity ladder against the real DB
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { normalizeNumber } from '../lib/normalize';
 import { prisma } from '../lib/prisma';
 import { DomainValidationError, NotFoundError } from './errors';
 import { buildFitmentWhere, validateFitmentInput } from './fitment';
+import { createCatalogFixture, createPartFixture } from './test-fixtures';
 
 describe('fitment ladder', () => {
   const ts = Date.now();
@@ -26,15 +26,9 @@ describe('fitment ladder', () => {
   const partIds: number[] = [];
 
   beforeAll(async () => {
-    const manufacturer = await prisma.manufacturer.create({
-      data: { name: `Fitment Test Manufacturer ${ts}` },
-    });
-    manufacturerId = manufacturer.id;
-
-    const category = await prisma.category.create({
-      data: { name: `Fitment Test Category ${ts}` },
-    });
-    categoryId = category.id;
+    const catalog = await createCatalogFixture(prisma, `Fitment Test ${ts}`);
+    manufacturerId = catalog.manufacturerId;
+    categoryId = catalog.categoryId;
 
     const vehicleClass = await prisma.vehicleClass.create({
       data: { name: `Tractor_T${ts}` },
@@ -56,16 +50,11 @@ describe('fitment ladder', () => {
     vehicleModelMod2Id = modelMod2.id;
 
     async function createPart(sku: string, mpn: string): Promise<number> {
-      const part = await prisma.part.create({
-        data: {
-          sku,
-          skuNormalized: normalizeNumber(sku),
-          manufacturerId,
-          manufacturerPartNumber: mpn,
-          mpnNormalized: normalizeNumber(mpn),
-          name: sku,
-          categoryId,
-        },
+      const part = await createPartFixture(prisma, {
+        sku,
+        manufacturerPartNumber: mpn,
+        manufacturerId,
+        categoryId,
       });
       partIds.push(part.id);
       return part.id;
@@ -214,6 +203,12 @@ describe('fitment ladder', () => {
 
     it('throws NotFoundError when the vehicle make does not exist', async () => {
       await expect(validateFitmentInput({ vehicleClassId, vehicleMakeId: -1 })).rejects.toThrow(NotFoundError);
+    });
+
+    it('throws NotFoundError when the vehicle model does not exist despite a valid make', async () => {
+      await expect(
+        validateFitmentInput({ vehicleClassId, vehicleMakeId: vehicleMakeM1Id, vehicleModelId: -1 }),
+      ).rejects.toThrow(NotFoundError);
     });
   });
 });

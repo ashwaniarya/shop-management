@@ -2,10 +2,10 @@
 import { Prisma, StockTransactionType, UserRole } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { normalizeNumber } from '../lib/normalize';
 import { prisma } from '../lib/prisma';
 import { DomainValidationError, InsufficientStockError, NotFoundError } from './errors';
 import { appendStockTransaction, getTransactionsSummary } from './stockLedger';
+import { createCatalogFixture, createPartFixture } from './test-fixtures';
 
 describe('stockLedger', () => {
   const ts = Date.now();
@@ -24,33 +24,21 @@ describe('stockLedger', () => {
 
   async function createTestPart(): Promise<number> {
     partCounter += 1;
-    const sku = `SL-SKU-${ts}-${partCounter}`;
-    const mpn = `SL-MPN-${ts}-${partCounter}`;
-    const part = await prisma.part.create({
-      data: {
-        sku,
-        skuNormalized: normalizeNumber(sku),
-        manufacturerId,
-        manufacturerPartNumber: mpn,
-        mpnNormalized: normalizeNumber(mpn),
-        name: `StockLedger Test Part ${ts}-${partCounter}`,
-        categoryId,
-      },
+    const part = await createPartFixture(prisma, {
+      sku: `SL-SKU-${ts}-${partCounter}`,
+      manufacturerPartNumber: `SL-MPN-${ts}-${partCounter}`,
+      name: `StockLedger Test Part ${ts}-${partCounter}`,
+      manufacturerId,
+      categoryId,
     });
     partIds.push(part.id);
     return part.id;
   }
 
   beforeAll(async () => {
-    const manufacturer = await prisma.manufacturer.create({
-      data: { name: `StockLedger Test Manufacturer ${ts}` },
-    });
-    manufacturerId = manufacturer.id;
-
-    const category = await prisma.category.create({
-      data: { name: `StockLedger Test Category ${ts}` },
-    });
-    categoryId = category.id;
+    const catalog = await createCatalogFixture(prisma, `StockLedger Test ${ts}`);
+    manufacturerId = catalog.manufacturerId;
+    categoryId = catalog.categoryId;
 
     const shopA = await prisma.shop.create({ data: { name: `StockLedger Test Shop A ${ts}` } });
     shopAId = shopA.id;
@@ -181,6 +169,50 @@ describe('stockLedger', () => {
 
       expect(transactionCountAfter).toBe(transactionCountBefore);
       expect(inventoryItem.quantityOnHand.toNumber()).toBe(5);
+    });
+
+    it('allows exactly one of two concurrent sales competing for the remaining stock', async () => {
+      const partId = await createTestPart();
+      await appendStockTransaction({
+        shopId: shopAId,
+        partId,
+        userId: userAId,
+        type: StockTransactionType.PURCHASE,
+        quantity: 5,
+        unitPrice: 100,
+      });
+
+      const sellAllFive = () =>
+        appendStockTransaction({
+          shopId: shopAId,
+          partId,
+          userId: userAId,
+          type: StockTransactionType.SALE,
+          quantity: 5,
+          unitPrice: 150,
+        });
+
+      const outcomes = await Promise.allSettled([sellAllFive(), sellAllFive()]);
+
+      const fulfilled = outcomes.filter((outcome) => outcome.status === 'fulfilled');
+      const rejected = outcomes.filter(
+        (outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected',
+      );
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+      expect(rejected[0].reason).toBeInstanceOf(InsufficientStockError);
+
+      const inventoryItem = await prisma.inventoryItem.findUniqueOrThrow({
+        where: { shopId_partId: { shopId: shopAId, partId } },
+      });
+      const transactions = await prisma.stockTransaction.findMany({
+        where: { shopId: shopAId, partId },
+        select: { quantity: true },
+      });
+      const ledgerSum = transactions.reduce((sum, row) => sum.plus(row.quantity), new Prisma.Decimal(0));
+
+      expect(inventoryItem.quantityOnHand.toNumber()).toBe(0);
+      expect(inventoryItem.quantityOnHand.equals(ledgerSum)).toBe(true);
     });
 
     it('rolls back the freshly-created inventory item when a sale on a brand-new part goes negative', async () => {

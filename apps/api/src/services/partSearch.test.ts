@@ -6,6 +6,7 @@ import { normalizeNumber } from '../lib/normalize';
 import { prisma } from '../lib/prisma';
 import { DomainValidationError } from './errors';
 import { searchPartsByNumber } from './partSearch';
+import { createCatalogFixture, createPartFixture } from './test-fixtures';
 
 describe('searchPartsByNumber', () => {
   const ts = Date.now();
@@ -23,31 +24,21 @@ describe('searchPartsByNumber', () => {
   let dedupPartId: number;
 
   beforeAll(async () => {
-    const manufacturer = await prisma.manufacturer.create({
-      data: { name: `PartSearch Test Manufacturer ${ts}` },
-    });
-    manufacturerId = manufacturer.id;
-
-    const category = await prisma.category.create({
-      data: { name: `PartSearch Test Category ${ts}` },
-    });
-    categoryId = category.id;
+    const catalog = await createCatalogFixture(prisma, `PartSearch Test ${ts}`);
+    manufacturerId = catalog.manufacturerId;
+    categoryId = catalog.categoryId;
 
     const supplier = await prisma.supplier.create({
       data: { name: `PartSearch Test Supplier ${ts}` },
     });
     supplierId = supplier.id;
 
-    const part = await prisma.part.create({
-      data: {
-        sku,
-        skuNormalized: normalizeNumber(sku),
-        manufacturerId,
-        manufacturerPartNumber: mpn,
-        mpnNormalized: normalizeNumber(mpn),
-        name: `PartSearch Fixture Part ${ts}`,
-        categoryId,
-      },
+    const part = await createPartFixture(prisma, {
+      sku,
+      manufacturerPartNumber: mpn,
+      name: `PartSearch Fixture Part ${ts}`,
+      manufacturerId,
+      categoryId,
     });
     partId = part.id;
 
@@ -69,16 +60,12 @@ describe('searchPartsByNumber', () => {
       },
     });
 
-    const dedupPart = await prisma.part.create({
-      data: {
-        sku: dedupSku,
-        skuNormalized: normalizeNumber(dedupSku),
-        manufacturerId,
-        manufacturerPartNumber: `DEDUP-MPN-${ts}`,
-        mpnNormalized: normalizeNumber(`DEDUP-MPN-${ts}`),
-        name: `PartSearch Dedup Fixture Part ${ts}`,
-        categoryId,
-      },
+    const dedupPart = await createPartFixture(prisma, {
+      sku: dedupSku,
+      manufacturerPartNumber: `DEDUP-MPN-${ts}`,
+      name: `PartSearch Dedup Fixture Part ${ts}`,
+      manufacturerId,
+      categoryId,
     });
     dedupPartId = dedupPart.id;
 
