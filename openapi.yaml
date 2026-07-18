@@ -2226,7 +2226,7 @@ components:
           type: number
           description: Current stock on hand. Changes only as a side effect of stock transactions.
         reorderLevel:
-          type: number
+          type: [number, "null"]
         costPrice:
           type: [number, "null"]
         sellingPrice:
@@ -2246,7 +2246,7 @@ components:
       type: object
       properties:
         reorderLevel:
-          type: number
+          type: [number, "null"]
         costPrice:
           type: [number, "null"]
         sellingPrice:

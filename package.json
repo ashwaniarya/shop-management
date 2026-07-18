@@ -8,5 +8,8 @@
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down"
   },
-  "packageManager": "pnpm@9.15.2"
+  "packageManager": "pnpm@9.15.2",
+  "engines": {
+    "node": ">=20"
+  }
 }

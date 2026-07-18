@@ -14,7 +14,7 @@ Multi-shop management system; first use case: vehicle spare-parts shop.
 pnpm install
 pnpm db:up            # start PostgreSQL 16 via docker compose
 cp .env.example apps/api/.env
-pnpm --filter api prisma migrate dev
+pnpm --filter api db:migrate
 pnpm --filter api db:seed
 pnpm dev              # api on :4000 (Swagger at /docs), web on :3000
 ```

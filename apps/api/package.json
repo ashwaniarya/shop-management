@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "pnpm --filter @shop/shared build && tsx watch src/server.ts",
-    "build": "pnpm --filter @shop/shared build && tsc -p tsconfig.build.json",
+    "build": "pnpm --filter @shop/shared build && prisma generate && tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
     "test": "pnpm --filter @shop/shared build && vitest run",
     "db:migrate": "prisma migrate dev",
@@ -12,6 +12,9 @@
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "dependencies": {
     "@prisma/client": "6",

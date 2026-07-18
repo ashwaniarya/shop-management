@@ -23,5 +23,8 @@
     "@tailwindcss/postcss": "^4",
     "tailwindcss": "^4",
     "vitest": "^4.1.10"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

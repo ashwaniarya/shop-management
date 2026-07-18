@@ -441,9 +441,9 @@ A part that fits several specific vehicles gets several rows — one per applica
 
 A part with **zero** PartFitment rows is a universal part — grease, bulbs, anything that fits everything. Absence of rows is the signal; there is no separate `is_universal` flag. This is a deliberate convention, not an oversight, and should be documented wherever fitment is queried.
 
-Validity rules, enforced in the service layer rather than the database schema:
-- Model requires make — a row can't set `vehicle_model_id` while leaving `vehicle_make_id` null; you can't skip a level of the ladder.
-- If `vehicle_model_id` is set, that model's own make and class must equal the row's `vehicle_make_id` and `vehicle_class_id` — a row can't point to a model that belongs to a different make or class than the row claims.
+Validity rules:
+- Model requires make — a row can't set `vehicle_model_id` while leaving `vehicle_make_id` null; you can't skip a level of the ladder. Enforced at the database level by a CHECK constraint (`part_fitment_model_requires_make`), so even direct writes that bypass the service layer cannot violate it.
+- If `vehicle_model_id` is set, that model's own make and class must equal the row's `vehicle_make_id` and `vehicle_class_id` — a row can't point to a model that belongs to a different make or class than the row claims. Enforced in the service layer.
 
 Looking up fitment for a class/make/model selection is one flat, indexed query — no recursive joins:
 
