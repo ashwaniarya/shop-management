@@ -20,7 +20,7 @@ import type { Part } from '@shop/shared';
 import type { TransactionsFiltersValue } from './TransactionsFilterBar';
 
 const PAGE_SIZE = 25;
-const COLUMN_COUNT = 7;
+const COLUMN_COUNT = 8;
 
 interface TransactionsTableProps {
   shopId: number;
@@ -61,6 +61,7 @@ export function TransactionsTable({ shopId, filters, partsById }: TransactionsTa
             <Th align="right">Unit price</Th>
             <Th align="right">Line value</Th>
             <Th>User</Th>
+            <Th>Notes</Th>
           </tr>
         </thead>
         <tbody>
@@ -100,6 +101,7 @@ export function TransactionsTable({ shopId, filters, partsById }: TransactionsTa
                     {formatCurrency(lineValue)}
                   </Td>
                   <Td className="text-ink-400">{usersById.get(transaction.userId)?.name ?? `#${transaction.userId}`}</Td>
+                  <Td className="text-ink-400">{transaction.notes ?? '—'}</Td>
                 </Tr>
               );
             })
