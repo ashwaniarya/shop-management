@@ -1,0 +1,12 @@
+{
+  "name": "shop-management",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --parallel --filter './apps/*' dev",
+    "build": "pnpm --filter './apps/*' build",
+    "test": "pnpm --filter './apps/*' --filter './packages/*' test",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down"
+  },
+  "packageManager": "pnpm@9.15.2"
+}
