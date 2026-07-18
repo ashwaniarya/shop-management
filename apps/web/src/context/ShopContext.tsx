@@ -6,6 +6,8 @@ import type { Shop } from '@shop/shared';
 
 import { listShops } from '@/lib/api';
 
+import { resolveSelectedShopId } from './resolveSelectedShopId';
+
 const SELECTED_SHOP_STORAGE_KEY = 'shop-management:selectedShopId';
 
 function persistSelectedShopId(shopId: number | null): void {
@@ -37,15 +39,17 @@ export function ShopProvider({ children }: { children: ReactNode }) {
     listShops({ limit: 100 })
       .then((page) => {
         setShops(page.data);
-        // Default to the first shop when nothing was previously selected, so
-        // shop-scoped screens always have a shopId to work with. Persisted
-        // immediately so localStorage reflects the effective selection, not
-        // just ones the user explicitly picked.
-        const resolvedShopId = storedShopIdAsNumber ?? page.data[0]?.id ?? null;
+        // Falls back to the first shop when nothing was stored OR the stored id
+        // no longer exists (e.g. after a dev reseed), and persists the resolved
+        // value so localStorage always reflects the effective selection.
+        const resolvedShopId = resolveSelectedShopId(storedShopIdAsNumber, page.data);
         setSelectedShopIdState(resolvedShopId);
         persistSelectedShopId(resolvedShopId);
       })
-      .catch(() => setShops([]))
+      .catch((error) => {
+        console.error('Failed to load shops', error);
+        setShops([]);
+      })
       .finally(() => setIsLoading(false));
   }, []);
 

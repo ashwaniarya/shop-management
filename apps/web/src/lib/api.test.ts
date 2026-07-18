@@ -101,6 +101,22 @@ describe('api client', () => {
     expect((caughtError as ApiError).message).toBe('Shop 99 not found');
   });
 
+  it('wraps a fetch rejection in an ApiError with status 0 and NETWORK_ERROR code', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+
+    let caughtError: unknown;
+    try {
+      await get('/shops');
+    } catch (error) {
+      caughtError = error;
+    }
+
+    expect(caughtError).toBeInstanceOf(ApiError);
+    expect((caughtError as ApiError).status).toBe(0);
+    expect((caughtError as ApiError).code).toBe('NETWORK_ERROR');
+    expect((caughtError as ApiError).message).toBe('Failed to fetch');
+  });
+
   it('carries validation error details through the ApiError', async () => {
     const details = [{ path: ['name'], message: 'Required' }];
     mockFetchOnce({

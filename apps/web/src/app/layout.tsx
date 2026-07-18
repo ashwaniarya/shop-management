@@ -14,8 +14,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      {/* Pinned light theme: globals.css still flips bg/fg under prefers-color-scheme,
-          which would wash out this shell's un-dark-mode-aware gray text. */}
+      {/* Pinned light theme: the shell's gray palette has no dark: variants yet. */}
       <body className="bg-white text-gray-900 antialiased">
         <ShopProvider>
           <div className="flex min-h-screen">
