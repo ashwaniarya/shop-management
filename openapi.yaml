@@ -1,0 +1,2435 @@
+openapi: 3.1.0
+info:
+  title: Shop Management API
+  version: 0.1.0
+  description: >-
+    REST API for a multi-shop management system. The first use case is a
+    vehicle spare-parts shop: manufacturers, categories, suppliers, vehicle
+    fitment (class / make / model), a parts catalog with cross-references and
+    supplier part numbers, per-shop inventory, and an append-only stock
+    transaction ledger.
+  license:
+    name: UNLICENSED
+    identifier: UNLICENSED
+servers:
+  - url: http://localhost:4000
+    description: Local development
+tags:
+  - name: Manufacturers
+    description: Parts manufacturers / brands (e.g. Bosch, Denso).
+  - name: Categories
+    description: Hierarchical part categories.
+  - name: Suppliers
+    description: Vendors that parts can be sourced from.
+  - name: Vehicle Classes
+    description: Broad vehicle classes (e.g. two-wheeler, three-wheeler, car).
+  - name: Vehicle Makes
+    description: Vehicle manufacturers (e.g. Honda, Maruti Suzuki).
+  - name: Vehicle Models
+    description: Specific vehicle models, scoped to a make and class.
+  - name: Parts
+    description: The spare-parts catalog.
+  - name: Part Fitments
+    description: Vehicle fitment links for a part.
+  - name: Part Cross References
+    description: OEM, competitor, supersession and alternate numbers for a part.
+  - name: Part Suppliers
+    description: Supplier part numbers and preference links for a part.
+  - name: Shops
+    description: Individual shop locations.
+  - name: Shop Users
+    description: Staff accounts scoped to a shop.
+  - name: Inventory
+    description: Per-shop stock levels and pricing for parts.
+  - name: Stock Transactions
+    description: Append-only per-shop stock ledger.
+security:
+  - bearerAuth: []
+paths:
+  /api/v1/manufacturers:
+    get:
+      operationId: listManufacturers
+      summary: List manufacturers
+      tags: ["Manufacturers"]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: A page of manufacturers.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManufacturerListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      operationId: createManufacturer
+      summary: Create a manufacturer
+      tags: ["Manufacturers"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManufacturerCreate'
+      responses:
+        '201':
+          description: The created manufacturer.
+          headers:
+            Location:
+              description: URL of the created manufacturer.
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Manufacturer'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/manufacturers/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      operationId: getManufacturer
+      summary: Get a manufacturer by id
+      tags: ["Manufacturers"]
+      responses:
+        '200':
+          description: The manufacturer.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Manufacturer'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: updateManufacturer
+      summary: Update a manufacturer
+      tags: ["Manufacturers"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManufacturerUpdate'
+      responses:
+        '200':
+          description: The updated manufacturer.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Manufacturer'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteManufacturer
+      summary: Soft-delete a manufacturer
+      description: Sets `isActive` to `false`. Does not remove the row.
+      tags: ["Manufacturers"]
+      responses:
+        '204':
+          description: The manufacturer was deactivated.
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/categories:
+    get:
+      operationId: listCategories
+      summary: List categories
+      tags: ["Categories"]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: parentId
+          in: query
+          required: false
+          description: >-
+            Filter to the children of this category id. Omit to return all
+            categories regardless of nesting level.
+          schema:
+            type: integer
+        - name: tree
+          in: query
+          required: false
+          description: >-
+            If true, return categories as a nested tree (root categories at
+            the top level, each with a recursive `children` array) instead of
+            a flat list.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: A page of categories, or a category tree when `tree=true`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      operationId: createCategory
+      summary: Create a category
+      tags: ["Categories"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryCreate'
+      responses:
+        '201':
+          description: The created category.
+          headers:
+            Location:
+              description: URL of the created category.
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/categories/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      operationId: getCategory
+      summary: Get a category by id
+      tags: ["Categories"]
+      responses:
+        '200':
+          description: The category.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: updateCategory
+      summary: Update a category
+      tags: ["Categories"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryUpdate'
+      responses:
+        '200':
+          description: The updated category.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteCategory
+      summary: Delete a category
+      description: >-
+        Hard-deletes the category. Categories have no `isActive` flag, so
+        deletion is permanent. Fails with 409 if the category has any parts
+        assigned to it or has child categories.
+      tags: ["Categories"]
+      responses:
+        '204':
+          description: The category was deleted.
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/suppliers:
+    get:
+      operationId: listSuppliers
+      summary: List suppliers
+      tags: ["Suppliers"]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: A page of suppliers.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplierListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      operationId: createSupplier
+      summary: Create a supplier
+      tags: ["Suppliers"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupplierCreate'
+      responses:
+        '201':
+          description: The created supplier.
+          headers:
+            Location:
+              description: URL of the created supplier.
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Supplier'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/suppliers/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      operationId: getSupplier
+      summary: Get a supplier by id
+      tags: ["Suppliers"]
+      responses:
+        '200':
+          description: The supplier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Supplier'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: updateSupplier
+      summary: Update a supplier
+      tags: ["Suppliers"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupplierUpdate'
+      responses:
+        '200':
+          description: The updated supplier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Supplier'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteSupplier
+      summary: Soft-delete a supplier
+      description: Sets `isActive` to `false`. Does not remove the row.
+      tags: ["Suppliers"]
+      responses:
+        '204':
+          description: The supplier was deactivated.
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/vehicle-classes:
+    get:
+      operationId: listVehicleClasses
+      summary: List vehicle classes
+      tags: ["Vehicle Classes"]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: A page of vehicle classes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleClassListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      operationId: createVehicleClass
+      summary: Create a vehicle class
+      tags: ["Vehicle Classes"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VehicleClassCreate'
+      responses:
+        '201':
+          description: The created vehicle class.
+          headers:
+            Location:
+              description: URL of the created vehicle class.
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleClass'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/vehicle-classes/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      operationId: getVehicleClass
+      summary: Get a vehicle class by id
+      tags: ["Vehicle Classes"]
+      responses:
+        '200':
+          description: The vehicle class.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleClass'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: updateVehicleClass
+      summary: Update a vehicle class
+      tags: ["Vehicle Classes"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VehicleClassUpdate'
+      responses:
+        '200':
+          description: The updated vehicle class.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleClass'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteVehicleClass
+      summary: Soft-delete a vehicle class
+      description: Sets `isActive` to `false`. Does not remove the row.
+      tags: ["Vehicle Classes"]
+      responses:
+        '204':
+          description: The vehicle class was deactivated.
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/vehicle-makes:
+    get:
+      operationId: listVehicleMakes
+      summary: List vehicle makes
+      tags: ["Vehicle Makes"]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: A page of vehicle makes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleMakeListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      operationId: createVehicleMake
+      summary: Create a vehicle make
+      tags: ["Vehicle Makes"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VehicleMakeCreate'
+      responses:
+        '201':
+          description: The created vehicle make.
+          headers:
+            Location:
+              description: URL of the created vehicle make.
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleMake'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/vehicle-makes/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      operationId: getVehicleMake
+      summary: Get a vehicle make by id
+      tags: ["Vehicle Makes"]
+      responses:
+        '200':
+          description: The vehicle make.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleMake'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: updateVehicleMake
+      summary: Update a vehicle make
+      tags: ["Vehicle Makes"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VehicleMakeUpdate'
+      responses:
+        '200':
+          description: The updated vehicle make.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleMake'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteVehicleMake
+      summary: Soft-delete a vehicle make
+      description: Sets `isActive` to `false`. Does not remove the row.
+      tags: ["Vehicle Makes"]
+      responses:
+        '204':
+          description: The vehicle make was deactivated.
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/vehicle-models:
+    get:
+      operationId: listVehicleModels
+      summary: List vehicle models
+      tags: ["Vehicle Models"]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: makeId
+          in: query
+          required: false
+          description: Filter to models belonging to this vehicle make.
+          schema:
+            type: integer
+        - name: classId
+          in: query
+          required: false
+          description: Filter to models belonging to this vehicle class.
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: A page of vehicle models.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleModelListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      operationId: createVehicleModel
+      summary: Create a vehicle model
+      tags: ["Vehicle Models"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VehicleModelCreate'
+      responses:
+        '201':
+          description: The created vehicle model.
+          headers:
+            Location:
+              description: URL of the created vehicle model.
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleModel'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/vehicle-models/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      operationId: getVehicleModel
+      summary: Get a vehicle model by id
+      tags: ["Vehicle Models"]
+      responses:
+        '200':
+          description: The vehicle model.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleModel'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: updateVehicleModel
+      summary: Update a vehicle model
+      tags: ["Vehicle Models"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VehicleModelUpdate'
+      responses:
+        '200':
+          description: The updated vehicle model.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleModel'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteVehicleModel
+      summary: Soft-delete a vehicle model
+      description: Sets `isActive` to `false`. Does not remove the row.
+      tags: ["Vehicle Models"]
+      responses:
+        '204':
+          description: The vehicle model was deactivated.
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/parts:
+    get:
+      operationId: listParts
+      summary: List parts
+      tags: ["Parts"]
+      description: >-
+        Lists parts. When any of `vehicleClassId`, `vehicleMakeId` or
+        `vehicleModelId` is supplied, results are filtered using a
+        specificity-ladder match against each part's fitment rows: a part
+        matches if it has a fitment naming the given model exactly, OR naming
+        the given make with a null model (make-wide fitment), OR naming the
+        given class with a null make (class-wide fitment). Parts with zero
+        fitment rows are universal and are excluded whenever any vehicle
+        filter is applied.
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: q
+          in: query
+          required: false
+          description: Free-text search over part name and description.
+          schema:
+            type: string
+        - name: categoryId
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: manufacturerId
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: isActive
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: vehicleClassId
+          in: query
+          required: false
+          description: Fitment filter. See the operation description for matching rules.
+          schema:
+            type: integer
+        - name: vehicleMakeId
+          in: query
+          required: false
+          description: Fitment filter. See the operation description for matching rules.
+          schema:
+            type: integer
+        - name: vehicleModelId
+          in: query
+          required: false
+          description: Fitment filter. See the operation description for matching rules.
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: A page of parts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      operationId: createPart
+      summary: Create a part
+      tags: ["Parts"]
+      description: >-
+        Responds 409 if a part with this `sku`, or this `manufacturerId` +
+        `manufacturerPartNumber` pair, already exists.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PartCreate'
+      responses:
+        '201':
+          description: The created part.
+          headers:
+            Location:
+              description: URL of the created part.
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Part'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/v1/parts/search:
+    get:
+      operationId: searchParts
+      summary: Search parts by any number type
+      tags: ["Parts"]
+      description: >-
+        Searches the normalized forms of all four number types associated
+        with parts: SKU, manufacturer part number, cross-reference numbers,
+        and supplier part numbers. Returns one result per match, indicating
+        which number type matched via `matchedBy` and the matched value via
+        `matchedNumber`.
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: number
+          in: query
+          required: true
+          description: The number to search for, matched against normalized forms.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Matching parts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartSearchResultListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/parts/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      operationId: getPart
+      summary: Get a part by id
+      tags: ["Parts"]
+      description: >-
+        Returns the part. Use `include` to embed related collections in a
+        single call.
+      parameters:
+        - name: include
+          in: query
+          required: false
+          description: Comma-separated related collections to embed in the response.
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [fitments, crossReferences, suppliers, inventory]
+      responses:
+        '200':
+          description: The part, with any requested related collections embedded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Part360'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: updatePart
+      summary: Update a part
+      tags: ["Parts"]
+      description: >-
+        Responds 409 if the updated `sku`, or `manufacturerId` +
+        `manufacturerPartNumber` pair, conflicts with another part.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PartUpdate'
+      responses:
+        '200':
+          description: The updated part.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Part'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      operationId: deletePart
+      summary: Soft-delete a part
+      description: Sets `isActive` to `false`. Does not remove the row.
+      tags: ["Parts"]
+      responses:
+        '204':
+          description: The part was deactivated.
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/parts/{id}/fitments:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      operationId: listPartFitments
+      summary: List fitments for a part
+      tags: ["Part Fitments"]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: A page of fitments.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartFitmentListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      operationId: createPartFitment
+      summary: Add a fitment to a part
+      tags: ["Part Fitments"]
+      description: >-
+        Responds 400 if `vehicleModelId` is set without `vehicleMakeId`, or
+        if the class/make/model combination does not form a valid hierarchy.
+        Responds 409 if this exact fitment already exists for the part.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PartFitmentCreate'
+      responses:
+        '201':
+          description: The created fitment.
+          headers:
+            Location:
+              description: URL of the created fitment.
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartFitment'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/v1/parts/{id}/fitments/{fitmentId}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+      - name: fitmentId
+        in: path
+        required: true
+        description: Fitment id.
+        schema:
+          type: integer
+    delete:
+      operationId: deletePartFitment
+      summary: Remove a fitment from a part
+      description: Hard delete. Fitment rows are pure links with no soft-delete flag.
+      tags: ["Part Fitments"]
+      responses:
+        '204':
+          description: The fitment was deleted.
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/parts/{id}/cross-references:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      operationId: listPartCrossReferences
+      summary: List cross-references for a part
+      tags: ["Part Cross References"]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: A page of cross-references.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartCrossReferenceListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      operationId: createPartCrossReference
+      summary: Add a cross-reference to a part
+      tags: ["Part Cross References"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PartCrossReferenceCreate'
+      responses:
+        '201':
+          description: The created cross-reference.
+          headers:
+            Location:
+              description: URL of the created cross-reference.
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartCrossReference'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/parts/{id}/cross-references/{crossRefId}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+      - name: crossRefId
+        in: path
+        required: true
+        description: Cross-reference id.
+        schema:
+          type: integer
+    delete:
+      operationId: deletePartCrossReference
+      summary: Remove a cross-reference from a part
+      description: Hard delete.
+      tags: ["Part Cross References"]
+      responses:
+        '204':
+          description: The cross-reference was deleted.
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/parts/{id}/suppliers:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      operationId: listPartSuppliers
+      summary: List suppliers linked to a part
+      tags: ["Part Suppliers"]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: A page of supplier-part links.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplierPartListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      operationId: createPartSupplier
+      summary: Link a supplier to a part
+      tags: ["Part Suppliers"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupplierPartCreate'
+      responses:
+        '201':
+          description: The created supplier-part link.
+          headers:
+            Location:
+              description: URL of the created supplier-part link.
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplierPart'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/parts/{id}/suppliers/{supplierPartId}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+      - name: supplierPartId
+        in: path
+        required: true
+        description: Supplier-part link id.
+        schema:
+          type: integer
+    patch:
+      operationId: updatePartSupplier
+      summary: Update a supplier-part link
+      tags: ["Part Suppliers"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupplierPartUpdate'
+      responses:
+        '200':
+          description: The updated supplier-part link.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplierPart'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deletePartSupplier
+      summary: Remove a supplier-part link
+      description: Hard delete.
+      tags: ["Part Suppliers"]
+      responses:
+        '204':
+          description: The supplier-part link was deleted.
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/shops:
+    get:
+      operationId: listShops
+      summary: List shops
+      tags: ["Shops"]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: A page of shops.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShopListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      operationId: createShop
+      summary: Create a shop
+      tags: ["Shops"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShopCreate'
+      responses:
+        '201':
+          description: The created shop.
+          headers:
+            Location:
+              description: URL of the created shop.
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Shop'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/shops/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      operationId: getShop
+      summary: Get a shop by id
+      tags: ["Shops"]
+      responses:
+        '200':
+          description: The shop.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Shop'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: updateShop
+      summary: Update a shop
+      tags: ["Shops"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShopUpdate'
+      responses:
+        '200':
+          description: The updated shop.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Shop'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteShop
+      summary: Soft-delete a shop
+      description: Sets `isActive` to `false`. Does not remove the row.
+      tags: ["Shops"]
+      responses:
+        '204':
+          description: The shop was deactivated.
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/shops/{shopId}/users:
+    parameters:
+      - $ref: '#/components/parameters/ShopIdParam'
+    get:
+      operationId: listShopUsers
+      summary: List users for a shop
+      tags: ["Shop Users"]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: A page of shop users.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      operationId: createShopUser
+      summary: Create a user for a shop
+      tags: ["Shop Users"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+      responses:
+        '201':
+          description: The created user.
+          headers:
+            Location:
+              description: URL of the created user.
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/shops/{shopId}/users/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ShopIdParam'
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      operationId: getShopUser
+      summary: Get a shop user by id
+      tags: ["Shop Users"]
+      responses:
+        '200':
+          description: The shop user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: updateShopUser
+      summary: Update a shop user
+      tags: ["Shop Users"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdate'
+      responses:
+        '200':
+          description: The updated shop user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteShopUser
+      summary: Soft-delete a shop user
+      description: Sets `isActive` to `false`. Does not remove the row.
+      tags: ["Shop Users"]
+      responses:
+        '204':
+          description: The shop user was deactivated.
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/shops/{shopId}/inventory:
+    parameters:
+      - $ref: '#/components/parameters/ShopIdParam'
+    get:
+      operationId: listInventory
+      summary: List inventory for a shop
+      tags: ["Inventory"]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: belowReorder
+          in: query
+          required: false
+          description: If true, only include items where `quantityOnHand` <= `reorderLevel`.
+          schema:
+            type: boolean
+        - name: categoryId
+          in: query
+          required: false
+          description: Filter to inventory for parts in this category.
+          schema:
+            type: integer
+        - name: q
+          in: query
+          required: false
+          description: Free-text search over the linked part's name.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: A page of inventory rows.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryRowListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/shops/{shopId}/inventory/{partId}:
+    parameters:
+      - $ref: '#/components/parameters/ShopIdParam'
+      - name: partId
+        in: path
+        required: true
+        description: Part id.
+        schema:
+          type: integer
+    get:
+      operationId: getInventoryItem
+      summary: Get the inventory record for a part in a shop
+      tags: ["Inventory"]
+      responses:
+        '200':
+          description: The inventory record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryItem'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      operationId: upsertInventoryItem
+      summary: Create or update the stock settings for a part in a shop
+      tags: ["Inventory"]
+      description: >-
+        Creates the inventory record for this shop/part pair if it does not
+        exist yet, otherwise updates it. Only stock settings (`reorderLevel`,
+        `costPrice`, `sellingPrice`, `storageLocation`) can be written here.
+        `quantityOnHand` is deliberately excluded from this endpoint's request
+        body: it changes only as a side effect of posting stock transactions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InventoryItemUpdate'
+      responses:
+        '200':
+          description: The upserted inventory record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryItem'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/shops/{shopId}/stock-transactions:
+    parameters:
+      - $ref: '#/components/parameters/ShopIdParam'
+    get:
+      operationId: listStockTransactions
+      summary: List stock transactions for a shop
+      description: >-
+        Returns ledger rows sorted newest first. This ledger is append-only;
+        there is no operation to update or delete a transaction.
+      tags: ["Stock Transactions"]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: type
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/StockTransactionType'
+        - name: partId
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: userId
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: from
+          in: query
+          required: false
+          description: Only include transactions at or after this date-time.
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          description: Only include transactions at or before this date-time.
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: A page of stock transactions, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockTransactionListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      operationId: createStockTransaction
+      summary: Record a stock transaction
+      description: >-
+        Appends a row to the append-only stock ledger and atomically updates
+        the shop/part `quantityOnHand` cache. There is no operation to update
+        or delete a transaction; corrections must be posted as a new
+        ADJUSTMENT transaction. Fails with 400 if a SALE would drive
+        `quantityOnHand` below zero.
+      tags: ["Stock Transactions"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockTransactionCreate'
+      responses:
+        '201':
+          description: The recorded transaction.
+          headers:
+            Location:
+              description: URL of the created transaction.
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockTransaction'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/shops/{shopId}/stock-transactions/summary:
+    parameters:
+      - $ref: '#/components/parameters/ShopIdParam'
+    get:
+      operationId: getStockTransactionsSummary
+      summary: Summarize stock transactions for a shop
+      tags: ["Stock Transactions"]
+      parameters:
+        - name: from
+          in: query
+          required: false
+          description: Only include transactions at or after this date-time.
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          description: Only include transactions at or before this date-time.
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Totals grouped by transaction type.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionSummary'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        Stub only. Every operation declares this security requirement for
+        forward compatibility, but auth enforcement is not implemented yet.
+
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      required: false
+      description: Page number (1-indexed).
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    LimitParam:
+      name: limit
+      in: query
+      required: false
+      description: Number of items per page.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    IdParam:
+      name: id
+      in: path
+      required: true
+      description: Resource id.
+      schema:
+        type: integer
+    ShopIdParam:
+      name: shopId
+      in: path
+      required: true
+      description: Shop id.
+      schema:
+        type: integer
+
+  responses:
+    NotFound:
+      description: The requested resource does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ValidationError:
+      description: The request body or query parameters failed validation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: The request conflicts with an existing resource (e.g. a unique-constraint violation).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Machine-readable error code, e.g. `NOT_FOUND`, `VALIDATION_ERROR`, `CONFLICT`.
+            message:
+              type: string
+              description: Human-readable error message.
+            details:
+              description: Additional structured context. Shape varies by `code` (e.g. field-level validation errors).
+
+    Meta:
+      type: object
+      required: [page, limit, total]
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+          description: Total number of matching records across all pages.
+
+    StockTransactionType:
+      type: string
+      enum: [SALE, PURCHASE, ADJUSTMENT]
+
+    Manufacturer:
+      type: object
+      required: [id, name, code, isActive, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        code:
+          type: [string, "null"]
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ManufacturerCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        code:
+          type: [string, "null"]
+    ManufacturerUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        code:
+          type: [string, "null"]
+        isActive:
+          type: boolean
+    ManufacturerListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Manufacturer'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    Category:
+      type: object
+      required: [id, name, parentCategoryId, displayOrder]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        parentCategoryId:
+          type: [integer, "null"]
+        displayOrder:
+          type: integer
+    CategoryCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        parentCategoryId:
+          type: [integer, "null"]
+        displayOrder:
+          type: integer
+    CategoryUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        parentCategoryId:
+          type: [integer, "null"]
+        displayOrder:
+          type: integer
+    CategoryTree:
+      description: A category with its descendants nested recursively.
+      allOf:
+        - $ref: '#/components/schemas/Category'
+        - type: object
+          required: [children]
+          properties:
+            children:
+              type: array
+              items:
+                $ref: '#/components/schemas/CategoryTree'
+    CategoryListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            oneOf:
+              - $ref: '#/components/schemas/Category'
+              - $ref: '#/components/schemas/CategoryTree'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    Supplier:
+      type: object
+      required: [id, name, contactPerson, phone, email, address, gstin, notes, isActive, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        contactPerson:
+          type: [string, "null"]
+        phone:
+          type: [string, "null"]
+        email:
+          type: [string, "null"]
+        address:
+          type: [string, "null"]
+        gstin:
+          type: [string, "null"]
+        notes:
+          type: [string, "null"]
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    SupplierCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        contactPerson:
+          type: [string, "null"]
+        phone:
+          type: [string, "null"]
+        email:
+          type: [string, "null"]
+        address:
+          type: [string, "null"]
+        gstin:
+          type: [string, "null"]
+        notes:
+          type: [string, "null"]
+    SupplierUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        contactPerson:
+          type: [string, "null"]
+        phone:
+          type: [string, "null"]
+        email:
+          type: [string, "null"]
+        address:
+          type: [string, "null"]
+        gstin:
+          type: [string, "null"]
+        notes:
+          type: [string, "null"]
+        isActive:
+          type: boolean
+    SupplierListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Supplier'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    VehicleClass:
+      type: object
+      required: [id, name, displayOrder, isActive, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        displayOrder:
+          type: integer
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    VehicleClassCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        displayOrder:
+          type: integer
+    VehicleClassUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        displayOrder:
+          type: integer
+        isActive:
+          type: boolean
+    VehicleClassListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/VehicleClass'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    VehicleMake:
+      type: object
+      required: [id, name, isActive, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    VehicleMakeCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+    VehicleMakeUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        isActive:
+          type: boolean
+    VehicleMakeListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/VehicleMake'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    VehicleModel:
+      type: object
+      required: [id, vehicleMakeId, vehicleClassId, name, isActive, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        vehicleMakeId:
+          type: integer
+        vehicleClassId:
+          type: integer
+        name:
+          type: string
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    VehicleModelCreate:
+      type: object
+      required: [vehicleMakeId, vehicleClassId, name]
+      properties:
+        vehicleMakeId:
+          type: integer
+        vehicleClassId:
+          type: integer
+        name:
+          type: string
+    VehicleModelUpdate:
+      type: object
+      properties:
+        vehicleMakeId:
+          type: integer
+        vehicleClassId:
+          type: integer
+        name:
+          type: string
+        isActive:
+          type: boolean
+    VehicleModelListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/VehicleModel'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    Part:
+      type: object
+      required: [id, sku, manufacturerId, manufacturerPartNumber, name, categoryId, description, unitOfMeasure, mrp, isActive, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        sku:
+          type: string
+        manufacturerId:
+          type: integer
+        manufacturerPartNumber:
+          type: string
+        name:
+          type: string
+        categoryId:
+          type: integer
+        description:
+          type: [string, "null"]
+        unitOfMeasure:
+          type: string
+          default: piece
+        mrp:
+          type: [number, "null"]
+          description: Maximum retail price.
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    PartCreate:
+      type: object
+      required: [sku, manufacturerId, manufacturerPartNumber, name, categoryId]
+      properties:
+        sku:
+          type: string
+        manufacturerId:
+          type: integer
+        manufacturerPartNumber:
+          type: string
+        name:
+          type: string
+        categoryId:
+          type: integer
+        description:
+          type: [string, "null"]
+        unitOfMeasure:
+          type: string
+          default: piece
+        mrp:
+          type: [number, "null"]
+    PartUpdate:
+      type: object
+      properties:
+        sku:
+          type: string
+        manufacturerId:
+          type: integer
+        manufacturerPartNumber:
+          type: string
+        name:
+          type: string
+        categoryId:
+          type: integer
+        description:
+          type: [string, "null"]
+        unitOfMeasure:
+          type: string
+        mrp:
+          type: [number, "null"]
+        isActive:
+          type: boolean
+    PartListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Part'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    PartFitment:
+      type: object
+      required: [id, partId, vehicleClassId, vehicleMakeId, vehicleModelId, notes, createdAt]
+      properties:
+        id:
+          type: integer
+        partId:
+          type: integer
+        vehicleClassId:
+          type: integer
+        vehicleMakeId:
+          type: [integer, "null"]
+        vehicleModelId:
+          type: [integer, "null"]
+        notes:
+          type: [string, "null"]
+        createdAt:
+          type: string
+          format: date-time
+    PartFitmentCreate:
+      type: object
+      required: [vehicleClassId]
+      properties:
+        vehicleClassId:
+          type: integer
+        vehicleMakeId:
+          type: [integer, "null"]
+        vehicleModelId:
+          type: [integer, "null"]
+        notes:
+          type: [string, "null"]
+    PartFitmentExpanded:
+      description: A part fitment with vehicle names expanded for display.
+      allOf:
+        - $ref: '#/components/schemas/PartFitment'
+        - type: object
+          required: [vehicleClassName, vehicleMakeName, vehicleModelName]
+          properties:
+            vehicleClassName:
+              type: string
+            vehicleMakeName:
+              type: [string, "null"]
+            vehicleModelName:
+              type: [string, "null"]
+    PartFitmentListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PartFitment'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    PartCrossReference:
+      type: object
+      required: [id, partId, refType, refNumber, refBrand, notes, createdAt]
+      properties:
+        id:
+          type: integer
+        partId:
+          type: integer
+        refType:
+          type: string
+          enum: [OEM, COMPETITOR, SUPERSEDES, ALTERNATE]
+        refNumber:
+          type: string
+        refBrand:
+          type: [string, "null"]
+        notes:
+          type: [string, "null"]
+        createdAt:
+          type: string
+          format: date-time
+    PartCrossReferenceCreate:
+      type: object
+      required: [refType, refNumber]
+      properties:
+        refType:
+          type: string
+          enum: [OEM, COMPETITOR, SUPERSEDES, ALTERNATE]
+        refNumber:
+          type: string
+        refBrand:
+          type: [string, "null"]
+        notes:
+          type: [string, "null"]
+    PartCrossReferenceListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PartCrossReference'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    SupplierPart:
+      type: object
+      required: [id, partId, supplierId, supplierPartNumber, isPreferred, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        partId:
+          type: integer
+        supplierId:
+          type: integer
+        supplierPartNumber:
+          type: [string, "null"]
+        isPreferred:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    SupplierPartCreate:
+      type: object
+      required: [supplierId]
+      properties:
+        supplierId:
+          type: integer
+        supplierPartNumber:
+          type: [string, "null"]
+        isPreferred:
+          type: boolean
+          default: false
+    SupplierPartUpdate:
+      type: object
+      properties:
+        supplierPartNumber:
+          type: [string, "null"]
+        isPreferred:
+          type: boolean
+    SupplierPartExpanded:
+      description: A supplier-part link with the supplier's name expanded for display.
+      allOf:
+        - $ref: '#/components/schemas/SupplierPart'
+        - type: object
+          required: [supplierName]
+          properties:
+            supplierName:
+              type: string
+    SupplierPartListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/SupplierPart'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    Shop:
+      type: object
+      required: [id, name, address, phone, gstin, isActive, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        address:
+          type: [string, "null"]
+        phone:
+          type: [string, "null"]
+        gstin:
+          type: [string, "null"]
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ShopCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        address:
+          type: [string, "null"]
+        phone:
+          type: [string, "null"]
+        gstin:
+          type: [string, "null"]
+    ShopUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        address:
+          type: [string, "null"]
+        phone:
+          type: [string, "null"]
+        gstin:
+          type: [string, "null"]
+        isActive:
+          type: boolean
+    ShopListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Shop'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    User:
+      type: object
+      required: [id, shopId, name, phone, email, role, isActive, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        shopId:
+          type: integer
+        name:
+          type: string
+        phone:
+          type: [string, "null"]
+        email:
+          type: [string, "null"]
+        role:
+          type: string
+          enum: [OWNER, MANAGER, STAFF]
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    UserCreate:
+      type: object
+      required: [name, role]
+      properties:
+        name:
+          type: string
+        phone:
+          type: [string, "null"]
+        email:
+          type: [string, "null"]
+        role:
+          type: string
+          enum: [OWNER, MANAGER, STAFF]
+    UserUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: [string, "null"]
+        email:
+          type: [string, "null"]
+        role:
+          type: string
+          enum: [OWNER, MANAGER, STAFF]
+        isActive:
+          type: boolean
+    UserListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    InventoryItem:
+      type: object
+      required: [id, shopId, partId, quantityOnHand, reorderLevel, costPrice, sellingPrice, storageLocation, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        shopId:
+          type: integer
+        partId:
+          type: integer
+        quantityOnHand:
+          type: number
+          description: Current stock on hand. Changes only as a side effect of stock transactions.
+        reorderLevel:
+          type: number
+        costPrice:
+          type: [number, "null"]
+        sellingPrice:
+          type: [number, "null"]
+        storageLocation:
+          type: [string, "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    InventoryItemUpdate:
+      description: >-
+        Stock settings that can be written directly. `quantityOnHand` is
+        deliberately excluded; it changes only via stock transactions.
+      type: object
+      properties:
+        reorderLevel:
+          type: number
+        costPrice:
+          type: [number, "null"]
+        sellingPrice:
+          type: [number, "null"]
+        storageLocation:
+          type: [string, "null"]
+    InventoryItemExpanded:
+      description: An inventory record with the shop's name expanded for display.
+      allOf:
+        - $ref: '#/components/schemas/InventoryItem'
+        - type: object
+          required: [shopName]
+          properties:
+            shopName:
+              type: string
+    InventoryRow:
+      description: An inventory record with a summary of the linked part, for display in a list.
+      allOf:
+        - $ref: '#/components/schemas/InventoryItem'
+        - type: object
+          required: [part]
+          properties:
+            part:
+              type: object
+              required: [sku, name, manufacturerName]
+              properties:
+                sku:
+                  type: string
+                name:
+                  type: string
+                manufacturerName:
+                  type: string
+    InventoryRowListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/InventoryRow'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    StockTransaction:
+      type: object
+      required: [id, shopId, partId, userId, type, quantity, unitPrice, notes, createdAt]
+      properties:
+        id:
+          type: integer
+        shopId:
+          type: integer
+        partId:
+          type: integer
+        userId:
+          type: integer
+        type:
+          $ref: '#/components/schemas/StockTransactionType'
+        quantity:
+          type: number
+          description: >-
+            Signed quantity delta applied to `quantityOnHand` by this
+            transaction: negative for SALE, positive for PURCHASE, and
+            as-entered for ADJUSTMENT.
+        unitPrice:
+          type: [number, "null"]
+        notes:
+          type: [string, "null"]
+        createdAt:
+          type: string
+          format: date-time
+    StockTransactionCreate:
+      type: object
+      required: [partId, userId, type, quantity]
+      properties:
+        partId:
+          type: integer
+        userId:
+          type: integer
+        type:
+          $ref: '#/components/schemas/StockTransactionType'
+        quantity:
+          type: number
+          description: >-
+            Always entered as a positive number for SALE and PURCHASE; the
+            API applies the sign automatically (PURCHASE increases
+            `quantityOnHand`, SALE decreases it). For ADJUSTMENT, pass the
+            signed delta directly (positive to increase stock, negative to
+            decrease); it is applied to `quantityOnHand` as-is.
+        unitPrice:
+          type: [number, "null"]
+          description: Required for SALE and PURCHASE. Optional for ADJUSTMENT.
+        notes:
+          type: [string, "null"]
+    StockTransactionListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockTransaction'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    TransactionSummary:
+      type: object
+      required: [sales, purchases, adjustments]
+      properties:
+        sales:
+          type: object
+          required: [count, quantity, revenue]
+          properties:
+            count:
+              type: integer
+            quantity:
+              type: number
+            revenue:
+              type: number
+        purchases:
+          type: object
+          required: [count, quantity, cost]
+          properties:
+            count:
+              type: integer
+            quantity:
+              type: number
+            cost:
+              type: number
+        adjustments:
+          type: object
+          required: [count, quantity]
+          properties:
+            count:
+              type: integer
+            quantity:
+              type: number
+
+    PartSearchResult:
+      description: A part matched by a number search, with details of what matched.
+      allOf:
+        - $ref: '#/components/schemas/Part'
+        - type: object
+          required: [matchedBy, matchedNumber]
+          properties:
+            matchedBy:
+              type: string
+              enum: [SKU, MPN, CROSS_REFERENCE, SUPPLIER_NUMBER]
+            matchedNumber:
+              type: string
+    PartSearchResultListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PartSearchResult'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    Part360:
+      description: >-
+        A part with optional related collections embedded, controlled by the
+        `include` query parameter on the get-by-id operation.
+      allOf:
+        - $ref: '#/components/schemas/Part'
+        - type: object
+          properties:
+            fitments:
+              type: array
+              items:
+                $ref: '#/components/schemas/PartFitmentExpanded'
+            crossReferences:
+              type: array
+              items:
+                $ref: '#/components/schemas/PartCrossReference'
+            suppliers:
+              type: array
+              items:
+                $ref: '#/components/schemas/SupplierPartExpanded'
+            inventory:
+              type: array
+              items:
+                $ref: '#/components/schemas/InventoryItemExpanded'
