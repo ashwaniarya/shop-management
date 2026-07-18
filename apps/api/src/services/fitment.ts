@@ -36,7 +36,7 @@ export async function buildFitmentWhere(
           OR: [
             { vehicleModelId: model.id },
             { vehicleMakeId: model.vehicleMakeId, vehicleModelId: null },
-            { vehicleClassId: model.vehicleClassId, vehicleMakeId: null },
+            { vehicleClassId: model.vehicleClassId, vehicleMakeId: null, vehicleModelId: null },
           ],
         },
       },
@@ -52,7 +52,7 @@ export async function buildFitmentWhere(
       return {
         fitments: {
           some: {
-            OR: [{ vehicleMakeId }, { vehicleClassId, vehicleMakeId: null }],
+            OR: [{ vehicleMakeId }, { vehicleClassId, vehicleMakeId: null, vehicleModelId: null }],
           },
         },
       };

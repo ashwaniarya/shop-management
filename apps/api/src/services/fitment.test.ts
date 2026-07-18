@@ -16,12 +16,14 @@ describe('fitment ladder', () => {
   let vehicleMakeM2Id: number;
   let vehicleModelMod1Id: number;
   let vehicleModelMod2Id: number;
+  let vehicleModelMod1SiblingId: number;
 
   let pClassWideId: number;
   let pMakeWideId: number;
   let pModelSpecificId: number;
   let pUniversalId: number;
   let pOtherMakeId: number;
+  let pSiblingOnlyId: number;
 
   const partIds: number[] = [];
 
@@ -48,6 +50,10 @@ describe('fitment ladder', () => {
       data: { name: `Mod2_${ts}`, vehicleMakeId: vehicleMakeM2Id, vehicleClassId },
     });
     vehicleModelMod2Id = modelMod2.id;
+    const modelMod1Sibling = await prisma.vehicleModel.create({
+      data: { name: `Mod1Sibling_${ts}`, vehicleMakeId: vehicleMakeM1Id, vehicleClassId },
+    });
+    vehicleModelMod1SiblingId = modelMod1Sibling.id;
 
     async function createPart(sku: string, mpn: string): Promise<number> {
       const part = await createPartFixture(prisma, {
@@ -65,6 +71,7 @@ describe('fitment ladder', () => {
     pModelSpecificId = await createPart(`P-MODELSPECIFIC-${ts}`, `MPN-MODELSPECIFIC-${ts}`);
     pUniversalId = await createPart(`P-UNIVERSAL-${ts}`, `MPN-UNIVERSAL-${ts}`);
     pOtherMakeId = await createPart(`P-OTHERMAKE-${ts}`, `MPN-OTHERMAKE-${ts}`);
+    pSiblingOnlyId = await createPart(`P-SIBLINGONLY-${ts}`, `MPN-SIBLINGONLY-${ts}`);
 
     await prisma.partFitment.createMany({
       data: [
@@ -82,6 +89,12 @@ describe('fitment ladder', () => {
           vehicleMakeId: vehicleMakeM2Id,
           vehicleModelId: vehicleModelMod2Id,
         },
+        {
+          partId: pSiblingOnlyId,
+          vehicleClassId,
+          vehicleMakeId: vehicleMakeM1Id,
+          vehicleModelId: vehicleModelMod1SiblingId,
+        },
       ],
     });
     // pUniversalId intentionally receives zero fitment rows
@@ -89,7 +102,9 @@ describe('fitment ladder', () => {
 
   afterAll(async () => {
     await prisma.part.deleteMany({ where: { id: { in: partIds } } });
-    await prisma.vehicleModel.deleteMany({ where: { id: { in: [vehicleModelMod1Id, vehicleModelMod2Id] } } });
+    await prisma.vehicleModel.deleteMany({
+      where: { id: { in: [vehicleModelMod1Id, vehicleModelMod2Id, vehicleModelMod1SiblingId] } },
+    });
     await prisma.vehicleMake.deleteMany({ where: { id: { in: [vehicleMakeM1Id, vehicleMakeM2Id] } } });
     await prisma.vehicleClass.delete({ where: { id: vehicleClassId } });
     await prisma.category.delete({ where: { id: categoryId } });
@@ -115,22 +130,32 @@ describe('fitment ladder', () => {
       const where = await buildFitmentWhere({ vehicleMakeId: vehicleMakeM1Id, vehicleClassId });
       const matched = await partIdsMatching(where);
 
-      expect(matched).toEqual(new Set([pClassWideId, pMakeWideId, pModelSpecificId]));
+      expect(matched).toEqual(new Set([pClassWideId, pMakeWideId, pModelSpecificId, pSiblingOnlyId]));
     });
 
     it('filtering by make alone (no class) omits class-wide fitments it cannot resolve', async () => {
       const where = await buildFitmentWhere({ vehicleMakeId: vehicleMakeM1Id });
       const matched = await partIdsMatching(where);
 
-      expect(matched).toEqual(new Set([pMakeWideId, pModelSpecificId]));
+      expect(matched).toEqual(new Set([pMakeWideId, pModelSpecificId, pSiblingOnlyId]));
     });
 
     it('filtering by class returns every fitted part but never the universal (fitment-less) part', async () => {
       const where = await buildFitmentWhere({ vehicleClassId });
       const matched = await partIdsMatching(where);
 
-      expect(matched).toEqual(new Set([pClassWideId, pMakeWideId, pModelSpecificId, pOtherMakeId]));
+      expect(matched).toEqual(
+        new Set([pClassWideId, pMakeWideId, pModelSpecificId, pOtherMakeId, pSiblingOnlyId]),
+      );
       expect(matched.has(pUniversalId)).toBe(false);
+    });
+
+    it('filtering by a model excludes parts fitted only to a same-make sibling model', async () => {
+      const byModel = await partIdsMatching(await buildFitmentWhere({ vehicleModelId: vehicleModelMod1Id }));
+      const byMake = await partIdsMatching(await buildFitmentWhere({ vehicleMakeId: vehicleMakeM1Id }));
+
+      expect(byModel.has(pSiblingOnlyId)).toBe(false);
+      expect(byMake.has(pSiblingOnlyId)).toBe(true);
     });
 
     it('returns undefined when no vehicle filter is given', async () => {
@@ -209,6 +234,24 @@ describe('fitment ladder', () => {
       await expect(
         validateFitmentInput({ vehicleClassId, vehicleMakeId: vehicleMakeM1Id, vehicleModelId: -1 }),
       ).rejects.toThrow(NotFoundError);
+    });
+  });
+
+  describe('model-requires-make DB constraint', () => {
+    it('rejects a direct insert of a model-level fitment without a make', async () => {
+      const part = await createPartFixture(prisma, {
+        sku: `P-CONSTRAINT-${ts}`,
+        manufacturerPartNumber: `MPN-CONSTRAINT-${ts}`,
+        manufacturerId,
+        categoryId,
+      });
+      partIds.push(part.id);
+
+      await expect(
+        prisma.partFitment.create({
+          data: { partId: part.id, vehicleClassId, vehicleModelId: vehicleModelMod1Id },
+        }),
+      ).rejects.toThrow(/part_fitment_model_requires_make|constraint/i);
     });
   });
 });

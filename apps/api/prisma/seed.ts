@@ -198,7 +198,13 @@ async function main() {
           description: '12V starter motor for Mahindra 575 DI tractor engines.',
           categoryId: categories.starterMotors.id,
           mrp: 4200,
-          fitments: [{ vehicleClassId: vehicleClasses.tractor.id, vehicleModelId: vehicleModels.mahindra575DI.id }],
+          fitments: [
+            {
+              vehicleClassId: vehicleClasses.tractor.id,
+              vehicleMakeId: vehicleMakes.mahindra.id,
+              vehicleModelId: vehicleModels.mahindra575DI.id,
+            },
+          ],
           crossReferences: [
             { refType: RefType.OEM, refNumber: 'MHD-STR-575DI-OE', refBrand: 'Mahindra' },
             { refType: RefType.COMPETITOR, refNumber: 'LTV-ST-5750', refBrand: 'Lucas TVS' },
@@ -216,7 +222,13 @@ async function main() {
           description: '12V starter motor for Mahindra 475 DI tractor engines.',
           categoryId: categories.starterMotors.id,
           mrp: 3900,
-          fitments: [{ vehicleClassId: vehicleClasses.tractor.id, vehicleModelId: vehicleModels.mahindra475DI.id }],
+          fitments: [
+            {
+              vehicleClassId: vehicleClasses.tractor.id,
+              vehicleMakeId: vehicleMakes.mahindra.id,
+              vehicleModelId: vehicleModels.mahindra475DI.id,
+            },
+          ],
           crossReferences: [
             { refType: RefType.OEM, refNumber: 'MHD-STR-475DI-OE', refBrand: 'Mahindra' },
             { refType: RefType.COMPETITOR, refNumber: 'BSH-ST-4750', refBrand: 'Bosch' },
@@ -347,7 +359,11 @@ async function main() {
           categoryId: categories.lighting.id,
           mrp: 240,
           fitments: [
-            { vehicleClassId: vehicleClasses.passenger.id, vehicleModelId: vehicleModels.marutiSuzukiSwift.id },
+            {
+              vehicleClassId: vehicleClasses.passenger.id,
+              vehicleMakeId: vehicleMakes.marutiSuzuki.id,
+              vehicleModelId: vehicleModels.marutiSuzukiSwift.id,
+            },
           ],
           crossReferences: [
             { refType: RefType.OEM, refNumber: 'MSZ-HLB-SWFT-OE', refBrand: 'Maruti Suzuki' },
