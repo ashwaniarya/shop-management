@@ -1,5 +1,5 @@
 // Behavioural test: exercises the shops router and its nested users sub-resource end-to-end via supertest against the real DB
-import { describe, expect, it, afterAll } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { listResponseSchema, shopSchema, userSchema } from '@shop/shared';
 
@@ -58,7 +58,7 @@ describe('shops router', () => {
     let shopId: number;
     let otherShopId: number;
 
-    it('sets up two shop fixtures', async () => {
+    beforeAll(async () => {
       const shop = await prisma.shop.create({ data: { name: `ShopUsers Test Shop ${ts}` } });
       shopId = shop.id;
       shopIds.push(shopId);

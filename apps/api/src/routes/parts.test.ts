@@ -384,6 +384,66 @@ describe('parts router', () => {
       expect(response.body.data[0].id).toBe(searchPartId);
     });
 
+    it('recomputes skuNormalized on PATCH so search follows the new sku', async () => {
+      const oldSku = `RECOMP-OLD-SKU-${ts}`;
+      const newSku = `RECOMP-NEW-SKU-${ts}`;
+      const createResponse = await request(app).post('/api/v1/parts').send({
+        sku: oldSku,
+        manufacturerId,
+        manufacturerPartNumber: `RECOMP-SKU-MPN-${ts}`,
+        name: `Recompute Sku Part ${ts}`,
+        categoryId,
+      });
+      partIds.push(createResponse.body.id);
+
+      const beforePatch = await request(app).get('/api/v1/parts/search').query({ number: oldSku });
+      expect(beforePatch.body.data).toHaveLength(1);
+      expect(beforePatch.body.data[0].matchedBy).toBe('SKU');
+
+      const patchResponse = await request(app)
+        .patch(`/api/v1/parts/${createResponse.body.id}`)
+        .send({ sku: newSku });
+      expect(patchResponse.status).toBe(200);
+
+      const oldAfterPatch = await request(app).get('/api/v1/parts/search').query({ number: oldSku });
+      expect(oldAfterPatch.body.data).toHaveLength(0);
+
+      const newAfterPatch = await request(app).get('/api/v1/parts/search').query({ number: newSku });
+      expect(newAfterPatch.body.data).toHaveLength(1);
+      expect(newAfterPatch.body.data[0].matchedBy).toBe('SKU');
+      expect(newAfterPatch.body.data[0].id).toBe(createResponse.body.id);
+    });
+
+    it('recomputes mpnNormalized on PATCH so search follows the new manufacturer part number', async () => {
+      const oldMpn = `RECOMP-OLD-MPN-${ts}`;
+      const newMpn = `RECOMP-NEW-MPN-${ts}`;
+      const createResponse = await request(app).post('/api/v1/parts').send({
+        sku: `RECOMP-MPN-SKU-${ts}`,
+        manufacturerId,
+        manufacturerPartNumber: oldMpn,
+        name: `Recompute Mpn Part ${ts}`,
+        categoryId,
+      });
+      partIds.push(createResponse.body.id);
+
+      const beforePatch = await request(app).get('/api/v1/parts/search').query({ number: oldMpn });
+      expect(beforePatch.body.data).toHaveLength(1);
+      expect(beforePatch.body.data[0].matchedBy).toBe('MPN');
+
+      const patchResponse = await request(app)
+        .patch(`/api/v1/parts/${createResponse.body.id}`)
+        .send({ manufacturerPartNumber: newMpn });
+      expect(patchResponse.status).toBe(200);
+
+      const oldAfterPatch = await request(app).get('/api/v1/parts/search').query({ number: oldMpn });
+      expect(oldAfterPatch.body.data).toHaveLength(0);
+
+      const newAfterPatch = await request(app).get('/api/v1/parts/search').query({ number: newMpn });
+      expect(newAfterPatch.body.data).toHaveLength(1);
+      expect(newAfterPatch.body.data[0].matchedBy).toBe('MPN');
+      expect(newAfterPatch.body.data[0].id).toBe(createResponse.body.id);
+    });
+
     it('returns 400 VALIDATION_ERROR when number is missing', async () => {
       const response = await request(app).get('/api/v1/parts/search');
 

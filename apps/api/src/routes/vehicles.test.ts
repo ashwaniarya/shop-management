@@ -1,5 +1,5 @@
 // Behavioural test: exercises the vehicle classes/makes/models routers end-to-end via supertest against the real DB
-import { describe, expect, it, afterAll } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { vehicleClassSchema, vehicleMakeSchema, vehicleModelSchema, listResponseSchema } from '@shop/shared';
 
@@ -117,7 +117,7 @@ describe('vehicle models router', () => {
     await prisma.vehicleClass.deleteMany({ where: { id: vehicleClassId } });
   });
 
-  it('sets up a make and class fixture', async () => {
+  beforeAll(async () => {
     const make = await prisma.vehicleMake.create({ data: { name: `ModelTest Make ${ts}` } });
     vehicleMakeId = make.id;
     const otherMake = await prisma.vehicleMake.create({ data: { name: `ModelTest OtherMake ${ts}` } });

@@ -3,6 +3,7 @@ import type { Category } from '@prisma/client';
 import { Router } from 'express';
 import { z } from 'zod';
 
+import { requireParentCategory } from '../lib/assertExists';
 import { asyncHandler } from '../lib/asyncHandler';
 import { buildMeta, toSkipTake } from '../lib/pagination';
 import { requireIdParam } from '../lib/params';
@@ -19,16 +20,6 @@ const listCategoriesQuerySchema = paginationQuerySchema.extend({
 });
 
 type CategoryTreeNode = Category & { children: CategoryTreeNode[] };
-
-async function assertParentCategoryExists(parentCategoryId: number | null | undefined): Promise<void> {
-  if (parentCategoryId === undefined || parentCategoryId === null) {
-    return;
-  }
-  const parent = await prisma.category.findUnique({ where: { id: parentCategoryId } });
-  if (!parent) {
-    throw new NotFoundError(`Category ${parentCategoryId} not found`);
-  }
-}
 
 categoriesRouter.get(
   '/categories',
@@ -81,7 +72,7 @@ categoriesRouter.post(
   '/categories',
   validate(categoryCreateSchema),
   asyncHandler(async (req, res) => {
-    await assertParentCategoryExists(req.body.parentCategoryId);
+    await requireParentCategory(req.body.parentCategoryId);
 
     const category = await prisma.category.create({ data: req.body });
 
@@ -107,7 +98,7 @@ categoriesRouter.patch(
   validate(categoryUpdateSchema),
   asyncHandler(async (req, res) => {
     const id = requireIdParam(req.params.id);
-    await assertParentCategoryExists(req.body.parentCategoryId);
+    await requireParentCategory(req.body.parentCategoryId);
 
     const category = await prisma.category.update({ where: { id }, data: req.body });
 

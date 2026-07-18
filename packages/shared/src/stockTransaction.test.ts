@@ -89,6 +89,16 @@ describe('stockTransactionCreateSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('rejects an ADJUSTMENT with a zero quantity', () => {
+    const result = stockTransactionCreateSchema.safeParse({
+      partId: 1,
+      userId: 1,
+      type: 'ADJUSTMENT',
+      quantity: 0,
+    });
+    expect(result.success).toBe(false);
+  });
+
   it('rejects an unknown type', () => {
     const result = stockTransactionCreateSchema.safeParse({
       partId: 1,

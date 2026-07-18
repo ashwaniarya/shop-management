@@ -7,7 +7,6 @@ export const partFitmentSchema = z.object({
   vehicleMakeId: z.number().int().nullable(),
   vehicleModelId: z.number().int().nullable(),
   notes: z.string().nullable(),
-  createdAt: z.string(),
 });
 export type PartFitment = z.infer<typeof partFitmentSchema>;
 

@@ -11,7 +11,7 @@ import {
 import { Router } from 'express';
 import { z } from 'zod';
 
-import { requirePart } from '../lib/assertExists';
+import { requireCategory, requireManufacturer, requirePart } from '../lib/assertExists';
 import { asyncHandler } from '../lib/asyncHandler';
 import { normalizeNumber } from '../lib/normalize';
 import { buildMeta, toSkipTake } from '../lib/pagination';
@@ -31,20 +31,6 @@ import { buildFitmentWhere, validateFitmentInput } from '../services/fitment';
 import { searchPartsByNumber } from '../services/partSearch';
 
 export const partsRouter = Router();
-
-async function assertManufacturerExists(id: number): Promise<void> {
-  const manufacturer = await prisma.manufacturer.findUnique({ where: { id } });
-  if (!manufacturer) {
-    throw new NotFoundError(`Manufacturer ${id} not found`);
-  }
-}
-
-async function assertCategoryExists(id: number): Promise<void> {
-  const category = await prisma.category.findUnique({ where: { id } });
-  if (!category) {
-    throw new NotFoundError(`Category ${id} not found`);
-  }
-}
 
 // --- Parts CRUD + list + search ------------------------------------------------
 
@@ -99,8 +85,8 @@ partsRouter.post(
   '/parts',
   validate(partCreateSchema),
   asyncHandler(async (req, res) => {
-    await assertManufacturerExists(req.body.manufacturerId);
-    await assertCategoryExists(req.body.categoryId);
+    await requireManufacturer(req.body.manufacturerId);
+    await requireCategory(req.body.categoryId);
 
     const part = await prisma.part.create({
       data: {
@@ -214,10 +200,10 @@ partsRouter.patch(
   asyncHandler(async (req, res) => {
     const id = requireIdParam(req.params.id);
     if (req.body.manufacturerId !== undefined) {
-      await assertManufacturerExists(req.body.manufacturerId);
+      await requireManufacturer(req.body.manufacturerId);
     }
     if (req.body.categoryId !== undefined) {
-      await assertCategoryExists(req.body.categoryId);
+      await requireCategory(req.body.categoryId);
     }
 
     // Unchecked (not the plain PartUpdateInput): the body carries raw scalar FKs

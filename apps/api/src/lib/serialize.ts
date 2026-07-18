@@ -57,10 +57,6 @@ export function serializeStockTransaction(transaction: StockTransaction) {
   };
 }
 
-// NOTE: the openapi.yaml PartFitment schema requires createdAt, but the Prisma
-// part_fitment table has no created_at column (see schema.prisma) — there is no
-// migration or contract-editing authority in this task's scope to reconcile that,
-// so this DTO omits createdAt rather than fabricate a value. Flagged in the report.
 export function serializePartFitment(fitment: PartFitment) {
   return {
     id: fitment.id,

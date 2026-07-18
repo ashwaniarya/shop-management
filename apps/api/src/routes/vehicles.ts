@@ -10,6 +10,7 @@ import {
 import { Router } from 'express';
 import { z } from 'zod';
 
+import { requireVehicleClass, requireVehicleMake } from '../lib/assertExists';
 import { asyncHandler } from '../lib/asyncHandler';
 import { buildMeta, toSkipTake } from '../lib/pagination';
 import { requireIdParam } from '../lib/params';
@@ -150,20 +151,6 @@ const listVehicleModelsQuerySchema = paginationQuerySchema.extend({
   classId: z.coerce.number().int().optional(),
 });
 
-async function assertVehicleMakeExists(id: number): Promise<void> {
-  const vehicleMake = await prisma.vehicleMake.findUnique({ where: { id } });
-  if (!vehicleMake) {
-    throw new NotFoundError(`Vehicle make ${id} not found`);
-  }
-}
-
-async function assertVehicleClassExists(id: number): Promise<void> {
-  const vehicleClass = await prisma.vehicleClass.findUnique({ where: { id } });
-  if (!vehicleClass) {
-    throw new NotFoundError(`Vehicle class ${id} not found`);
-  }
-}
-
 vehiclesRouter.get(
   '/vehicle-models',
   validateQuery(listVehicleModelsQuerySchema),
@@ -188,8 +175,8 @@ vehiclesRouter.post(
   '/vehicle-models',
   validate(vehicleModelCreateSchema),
   asyncHandler(async (req, res) => {
-    await assertVehicleMakeExists(req.body.vehicleMakeId);
-    await assertVehicleClassExists(req.body.vehicleClassId);
+    await requireVehicleMake(req.body.vehicleMakeId);
+    await requireVehicleClass(req.body.vehicleClassId);
 
     const vehicleModel = await prisma.vehicleModel.create({ data: req.body });
 
@@ -216,10 +203,10 @@ vehiclesRouter.patch(
   asyncHandler(async (req, res) => {
     const id = requireIdParam(req.params.id);
     if (req.body.vehicleMakeId !== undefined) {
-      await assertVehicleMakeExists(req.body.vehicleMakeId);
+      await requireVehicleMake(req.body.vehicleMakeId);
     }
     if (req.body.vehicleClassId !== undefined) {
-      await assertVehicleClassExists(req.body.vehicleClassId);
+      await requireVehicleClass(req.body.vehicleClassId);
     }
 
     const vehicleModel = await prisma.vehicleModel.update({ where: { id }, data: req.body });

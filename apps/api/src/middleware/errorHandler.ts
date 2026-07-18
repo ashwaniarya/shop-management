@@ -4,7 +4,12 @@ import { ZodError } from 'zod';
 
 import { ConflictError, DomainValidationError, InsufficientStockError, NotFoundError } from '../services/errors';
 
-export function errorHandler(error: unknown, _req: Request, res: Response, _next: NextFunction): void {
+export function errorHandler(error: unknown, _req: Request, res: Response, next: NextFunction): void {
+  if (res.headersSent) {
+    next(error);
+    return;
+  }
+
   if (error instanceof ZodError) {
     res
       .status(400)
@@ -43,7 +48,7 @@ export function errorHandler(error: unknown, _req: Request, res: Response, _next
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
     if (error.code === 'P2002') {
       res.status(409).json({
-        error: { code: 'CONFLICT', message: 'A record with these values already exists', details: error.meta },
+        error: { code: 'CONFLICT', message: 'A record with these values already exists' },
       });
       return;
     }

@@ -45,6 +45,12 @@ export const stockTransactionCreateSchema = stockTransactionCreateShape.superRef
         message: `unitPrice is required for ${value.type}`,
       });
     }
+  } else if (value.quantity === 0) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['quantity'],
+      message: 'quantity must be non-zero for ADJUSTMENT',
+    });
   }
 });
 export type StockTransactionCreate = z.infer<typeof stockTransactionCreateSchema>;

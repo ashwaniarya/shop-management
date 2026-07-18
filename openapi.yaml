@@ -1939,7 +1939,7 @@ components:
 
     PartFitment:
       type: object
-      required: [id, partId, vehicleClassId, vehicleMakeId, vehicleModelId, notes, createdAt]
+      required: [id, partId, vehicleClassId, vehicleMakeId, vehicleModelId, notes]
       properties:
         id:
           type: integer
@@ -1953,9 +1953,6 @@ components:
           type: [integer, "null"]
         notes:
           type: [string, "null"]
-        createdAt:
-          type: string
-          format: date-time
     PartFitmentCreate:
       type: object
       required: [vehicleClassId]
