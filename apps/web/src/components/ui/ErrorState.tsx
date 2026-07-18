@@ -1,16 +1,6 @@
-import { ApiError } from '@/lib/api';
+import { describeError } from '@/lib/describeError';
 
 import { Button } from './Button';
-
-export function describeError(error: unknown): string {
-  if (error instanceof ApiError) {
-    return error.message;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return 'An unexpected error occurred.';
-}
 
 export function ErrorState({
   error,

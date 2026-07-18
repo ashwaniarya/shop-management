@@ -4,10 +4,9 @@ import { useState } from 'react';
 
 import { FormActions } from '@/components/admin/FormActions';
 import { Dialog } from '@/components/ui/Dialog';
-import { describeError } from '@/components/ui/ErrorState';
 import { Input } from '@/components/ui/Input';
+import { useZodSubmit } from '@/hooks/useZodSubmit';
 import { createSupplier, updateSupplier } from '@/lib/api';
-import { getFieldErrors } from '@/lib/zodFieldErrors';
 import { supplierCreateSchema, supplierUpdateSchema, type Supplier } from '@shop/shared';
 
 interface SupplierFormDialogProps {
@@ -40,15 +39,22 @@ function SupplierForm({ supplier, onClose, onSaved }: { supplier: Supplier | nul
   const [address, setAddress] = useState(supplier?.address ?? '');
   const [gstin, setGstin] = useState(supplier?.gstin ?? '');
   const [notes, setNotes] = useState(supplier?.notes ?? '');
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const closeAfterSave = () => {
+    onSaved();
+    onClose();
+  };
+  const createSubmit = useZodSubmit(supplierCreateSchema, createSupplier, { onSuccess: closeAfterSave });
+  const updateSubmit = useZodSubmit(
+    supplierUpdateSchema,
+    (data) => (supplier ? updateSupplier(supplier.id, data) : Promise.reject(new Error('No supplier selected'))),
+    { onSuccess: closeAfterSave },
+  );
+  const { fieldErrors, submitError, isSubmitting, run } = supplier ? updateSubmit : createSubmit;
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    setSubmitError(null);
-
-    const payload = {
+    run({
       name: name.trim(),
       contactPerson: nullableOrTrimmed(contactPerson),
       phone: nullableOrTrimmed(phone),
@@ -56,42 +62,7 @@ function SupplierForm({ supplier, onClose, onSaved }: { supplier: Supplier | nul
       address: nullableOrTrimmed(address),
       gstin: nullableOrTrimmed(gstin),
       notes: nullableOrTrimmed(notes),
-    };
-    // Branched fully (rather than picking a schema with one ternary and the request
-    // function with another) so TypeScript can narrow `parsed.data` against the one
-    // schema actually used in each branch, instead of the union of both.
-    if (supplier) {
-      const parsed = supplierUpdateSchema.safeParse(payload);
-      if (!parsed.success) {
-        setFieldErrors(getFieldErrors(parsed.error));
-        return;
-      }
-      setFieldErrors({});
-      setIsSubmitting(true);
-      updateSupplier(supplier.id, parsed.data)
-        .then(() => {
-          onSaved();
-          onClose();
-        })
-        .catch((error: unknown) => setSubmitError(describeError(error)))
-        .finally(() => setIsSubmitting(false));
-      return;
-    }
-
-    const parsed = supplierCreateSchema.safeParse(payload);
-    if (!parsed.success) {
-      setFieldErrors(getFieldErrors(parsed.error));
-      return;
-    }
-    setFieldErrors({});
-    setIsSubmitting(true);
-    createSupplier(parsed.data)
-      .then(() => {
-        onSaved();
-        onClose();
-      })
-      .catch((error: unknown) => setSubmitError(describeError(error)))
-      .finally(() => setIsSubmitting(false));
+    });
   }
 
   return (

@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/Button';
-import { describeError } from '@/components/ui/ErrorState';
+import { FormError } from '@/components/ui/FormError';
 import { Input } from '@/components/ui/Input';
-import { getFieldErrors } from '@/lib/zodFieldErrors';
+import { useZodSubmit } from '@/hooks/useZodSubmit';
 import { inventoryItemUpdateSchema, type InventoryItem, type InventoryItemUpdate } from '@shop/shared';
 
 interface InventorySettingsFormProps {
@@ -23,37 +23,37 @@ export function InventorySettingsForm({ initialItem, onSaved, submit, submitLabe
   const [costPrice, setCostPrice] = useState(initialItem?.costPrice?.toString() ?? '');
   const [sellingPrice, setSellingPrice] = useState(initialItem?.sellingPrice?.toString() ?? '');
   const [storageLocation, setStorageLocation] = useState(initialItem?.storageLocation ?? '');
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
+  const justSavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (justSavedTimerRef.current) {
+        clearTimeout(justSavedTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  const { fieldErrors, submitError, isSubmitting, run } = useZodSubmit(inventoryItemUpdateSchema, submit, {
+    onSuccess: () => {
+      onSaved();
+      setJustSaved(true);
+      if (justSavedTimerRef.current) {
+        clearTimeout(justSavedTimerRef.current);
+      }
+      justSavedTimerRef.current = setTimeout(() => setJustSaved(false), 2000);
+    },
+  });
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    setSubmitError(null);
-
-    const parsed = inventoryItemUpdateSchema.safeParse({
+    run({
       reorderLevel: reorderLevel.trim() === '' ? null : Number(reorderLevel),
       costPrice: costPrice.trim() === '' ? null : Number(costPrice),
       sellingPrice: sellingPrice.trim() === '' ? null : Number(sellingPrice),
       storageLocation: storageLocation.trim() === '' ? null : storageLocation.trim(),
     });
-
-    if (!parsed.success) {
-      setFieldErrors(getFieldErrors(parsed.error));
-      return;
-    }
-    setFieldErrors({});
-    setIsSubmitting(true);
-
-    submit(parsed.data)
-      .then(() => {
-        onSaved();
-        setJustSaved(true);
-        setTimeout(() => setJustSaved(false), 2000);
-      })
-      .catch((error: unknown) => setSubmitError(describeError(error)))
-      .finally(() => setIsSubmitting(false));
   }
 
   return (
@@ -97,7 +97,7 @@ export function InventorySettingsForm({ initialItem, onSaved, submit, submitLabe
           {submitLabel}
         </Button>
         {justSaved ? <span className="text-xs text-positive-300">Saved</span> : null}
-        {submitError ? <span className="font-mono text-xs text-accent-400">{submitError}</span> : null}
+        <FormError error={submitError} />
       </div>
     </form>
   );

@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/Button';
+import { FormError } from '@/components/ui/FormError';
 
 interface FormActionsProps {
   submitLabel: string;
@@ -8,7 +9,7 @@ interface FormActionsProps {
 }
 
 // Save + Cancel + inline submit error, shared by every create/edit dialog form
-// (manufacturer, supplier, vehicle class/make/model, shop, shop user, category).
+// (manufacturer, supplier, vehicle class/make/model, shop, shop user, category, part).
 export function FormActions({ submitLabel, isSubmitting, error, onCancel }: FormActionsProps) {
   return (
     <div className="mt-1 flex items-center gap-3">
@@ -18,7 +19,7 @@ export function FormActions({ submitLabel, isSubmitting, error, onCancel }: Form
       <Button type="button" variant="ghost" size="sm" disabled={isSubmitting} onClick={onCancel}>
         Cancel
       </Button>
-      {error ? <span className="font-mono text-xs text-accent-400">{error}</span> : null}
+      <FormError error={error} />
     </div>
   );
 }

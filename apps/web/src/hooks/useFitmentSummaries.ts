@@ -54,6 +54,16 @@ export function useFitmentSummaries(partIds: number[]): UseFitmentSummariesResul
 
     return () => {
       isCancelled = true;
+      // Un-mark this run's ids: a cancelled run's .then skips all state updates, so
+      // without this its ids would stay "loading" forever. Runs before the next
+      // effect adds its own ids, so it cannot clobber a successor run's marks.
+      setLoadingPartIds((current) => {
+        const next = new Set(current);
+        for (const id of idsToFetch) {
+          next.delete(id);
+        }
+        return next;
+      });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [partIdsKey]);

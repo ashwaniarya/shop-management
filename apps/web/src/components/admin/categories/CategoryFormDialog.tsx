@@ -4,10 +4,9 @@ import { useState } from 'react';
 
 import { FormActions } from '@/components/admin/FormActions';
 import { Dialog } from '@/components/ui/Dialog';
-import { describeError } from '@/components/ui/ErrorState';
 import { Input } from '@/components/ui/Input';
+import { useZodSubmit } from '@/hooks/useZodSubmit';
 import { createCategory, updateCategory } from '@/lib/api';
-import { getFieldErrors } from '@/lib/zodFieldErrors';
 import { categoryCreateSchema, categoryUpdateSchema, type Category } from '@shop/shared';
 
 export type CategoryDialogTarget =
@@ -62,50 +61,32 @@ function CategoryForm({
   const isEdit = target.kind === 'edit';
   const [name, setName] = useState(isEdit ? target.category.name : '');
   const [displayOrder, setDisplayOrder] = useState(isEdit ? String(target.category.displayOrder) : '0');
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const closeAfterSave = () => {
+    onSaved();
+    onClose();
+  };
+  const createSubmit = useZodSubmit(categoryCreateSchema, createCategory, { onSuccess: closeAfterSave });
+  const updateSubmit = useZodSubmit(
+    categoryUpdateSchema,
+    (data) => (target.kind === 'edit' ? updateCategory(target.category.id, data) : Promise.reject(new Error('No category selected'))),
+    { onSuccess: closeAfterSave },
+  );
+  const { fieldErrors, submitError, isSubmitting, run } = isEdit ? updateSubmit : createSubmit;
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    setSubmitError(null);
-
     if (isEdit) {
-      const parsed = categoryUpdateSchema.safeParse({
+      run({
         name: name.trim(),
         displayOrder: displayOrder.trim() === '' ? undefined : Number(displayOrder),
       });
-      if (!parsed.success) {
-        setFieldErrors(getFieldErrors(parsed.error));
-        return;
-      }
-      setFieldErrors({});
-      setIsSubmitting(true);
-      updateCategory(target.category.id, parsed.data)
-        .then(() => {
-          onSaved();
-          onClose();
-        })
-        .catch((error: unknown) => setSubmitError(describeError(error)))
-        .finally(() => setIsSubmitting(false));
       return;
     }
-
-    const parentCategoryId = target.kind === 'create-child' ? target.parent.id : null;
-    const parsed = categoryCreateSchema.safeParse({ name: name.trim(), parentCategoryId });
-    if (!parsed.success) {
-      setFieldErrors(getFieldErrors(parsed.error));
-      return;
-    }
-    setFieldErrors({});
-    setIsSubmitting(true);
-    createCategory(parsed.data)
-      .then(() => {
-        onSaved();
-        onClose();
-      })
-      .catch((error: unknown) => setSubmitError(describeError(error)))
-      .finally(() => setIsSubmitting(false));
+    run({
+      name: name.trim(),
+      parentCategoryId: target.kind === 'create-child' ? target.parent.id : null,
+    });
   }
 
   return (

@@ -4,7 +4,8 @@ import { useState } from 'react';
 
 import { Button } from '@/components/ui/Button';
 import { ConfirmButton } from '@/components/ui/ConfirmButton';
-import { describeError } from '@/components/ui/ErrorState';
+import { FormError } from '@/components/ui/FormError';
+import { describeError } from '@/lib/describeError';
 
 interface ActivationActionProps {
   isActive: boolean;
@@ -39,7 +40,7 @@ export function ActivationAction({ isActive, onDeactivate, onReactivate }: Activ
       >
         Reactivate
       </Button>
-      {error ? <span className="font-mono text-xs text-accent-400">{error}</span> : null}
+      <FormError error={error} />
     </span>
   );
 }

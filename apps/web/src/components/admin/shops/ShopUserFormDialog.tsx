@@ -4,11 +4,10 @@ import { useState } from 'react';
 
 import { FormActions } from '@/components/admin/FormActions';
 import { Dialog } from '@/components/ui/Dialog';
-import { describeError } from '@/components/ui/ErrorState';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
+import { useZodSubmit } from '@/hooks/useZodSubmit';
 import { createShopUser, updateShopUser } from '@/lib/api';
-import { getFieldErrors } from '@/lib/zodFieldErrors';
 import { userRoleSchema, userCreateSchema, userUpdateSchema, type User, type UserRole } from '@shop/shared';
 
 const ROLE_OPTIONS = userRoleSchema.options;
@@ -51,55 +50,27 @@ function ShopUserForm({
   const [phone, setPhone] = useState(user?.phone ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
   const [role, setRole] = useState<UserRole>(user?.role ?? 'STAFF');
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const closeAfterSave = () => {
+    onSaved();
+    onClose();
+  };
+  const createSubmit = useZodSubmit(userCreateSchema, (data) => createShopUser(shopId, data), { onSuccess: closeAfterSave });
+  const updateSubmit = useZodSubmit(
+    userUpdateSchema,
+    (data) => (user ? updateShopUser(shopId, user.id, data) : Promise.reject(new Error('No user selected'))),
+    { onSuccess: closeAfterSave },
+  );
+  const { fieldErrors, submitError, isSubmitting, run } = user ? updateSubmit : createSubmit;
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    setSubmitError(null);
-
-    const payload = {
+    run({
       name: name.trim(),
       phone: nullableOrTrimmed(phone),
       email: nullableOrTrimmed(email),
       role,
-    };
-    // Branched fully (rather than picking a schema with one ternary and the request
-    // function with another) so TypeScript can narrow `parsed.data` against the one
-    // schema actually used in each branch, instead of the union of both.
-    if (user) {
-      const parsed = userUpdateSchema.safeParse(payload);
-      if (!parsed.success) {
-        setFieldErrors(getFieldErrors(parsed.error));
-        return;
-      }
-      setFieldErrors({});
-      setIsSubmitting(true);
-      updateShopUser(shopId, user.id, parsed.data)
-        .then(() => {
-          onSaved();
-          onClose();
-        })
-        .catch((error: unknown) => setSubmitError(describeError(error)))
-        .finally(() => setIsSubmitting(false));
-      return;
-    }
-
-    const parsed = userCreateSchema.safeParse(payload);
-    if (!parsed.success) {
-      setFieldErrors(getFieldErrors(parsed.error));
-      return;
-    }
-    setFieldErrors({});
-    setIsSubmitting(true);
-    createShopUser(shopId, parsed.data)
-      .then(() => {
-        onSaved();
-        onClose();
-      })
-      .catch((error: unknown) => setSubmitError(describeError(error)))
-      .finally(() => setIsSubmitting(false));
+    });
   }
 
   return (

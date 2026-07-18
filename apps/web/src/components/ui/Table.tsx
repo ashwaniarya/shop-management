@@ -18,9 +18,10 @@ interface ThProps extends ThHTMLAttributes<HTMLTableCellElement> {
   align?: 'left' | 'right';
 }
 
-export function Th({ children, align = 'left', className = '', ...rest }: ThProps) {
+export function Th({ children, align = 'left', className = '', scope = 'col', ...rest }: ThProps) {
   return (
     <th
+      scope={scope}
       className={`border-b border-ink-800 bg-ink-900 px-3 py-2.5 text-[11px] font-medium tracking-[0.08em] text-ink-500 uppercase ${align === 'right' ? 'text-right' : 'text-left'} ${className}`}
       {...rest}
     >

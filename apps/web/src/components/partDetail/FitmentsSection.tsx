@@ -5,13 +5,13 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { ConfirmButton } from '@/components/ui/ConfirmButton';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { describeError } from '@/components/ui/ErrorState';
+import { FormError } from '@/components/ui/FormError';
 import { Input } from '@/components/ui/Input';
 import { Table, Td, Th, Tr } from '@/components/ui/Table';
 import { VehicleCascadeSelect, type VehicleCascadeValue } from '@/components/ui/VehicleCascadeSelect';
 import { useVehicleCascadeData } from '@/hooks/useVehicleCascadeData';
+import { useZodSubmit } from '@/hooks/useZodSubmit';
 import { createPartFitment, deletePartFitment, type PartFitmentExpanded } from '@/lib/api';
-import { getFieldErrors } from '@/lib/zodFieldErrors';
 import { partFitmentCreateSchema } from '@shop/shared';
 
 const EMPTY_CASCADE: VehicleCascadeValue = { classId: null, makeId: null, modelId: null };
@@ -26,36 +26,27 @@ export function FitmentsSection({ partId, fitments, onMutated }: FitmentsSection
   const { vehicleClasses, vehicleMakes, vehicleModels } = useVehicleCascadeData();
   const [cascadeValue, setCascadeValue] = useState<VehicleCascadeValue>(EMPTY_CASCADE);
   const [notes, setNotes] = useState('');
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const { fieldErrors, submitError, isSubmitting, run } = useZodSubmit(
+    partFitmentCreateSchema,
+    (data) => createPartFitment(partId, data),
+    {
+      onSuccess: () => {
+        setCascadeValue(EMPTY_CASCADE);
+        setNotes('');
+        onMutated();
+      },
+    },
+  );
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    setSubmitError(null);
-
-    const parsed = partFitmentCreateSchema.safeParse({
+    run({
       vehicleClassId: cascadeValue.classId,
       vehicleMakeId: cascadeValue.makeId,
       vehicleModelId: cascadeValue.modelId,
       notes: notes.trim() === '' ? undefined : notes.trim(),
     });
-
-    if (!parsed.success) {
-      setFieldErrors(getFieldErrors(parsed.error));
-      return;
-    }
-    setFieldErrors({});
-    setIsSubmitting(true);
-
-    createPartFitment(partId, parsed.data)
-      .then(() => {
-        setCascadeValue(EMPTY_CASCADE);
-        setNotes('');
-        onMutated();
-      })
-      .catch((error: unknown) => setSubmitError(describeError(error)))
-      .finally(() => setIsSubmitting(false));
   }
 
   return (
@@ -100,7 +91,7 @@ export function FitmentsSection({ partId, fitments, onMutated }: FitmentsSection
           onChange={setCascadeValue}
           classRequired
         />
-        {fieldErrors.vehicleClassId ? <p className="text-xs text-accent-400">{fieldErrors.vehicleClassId}</p> : null}
+        <FormError error={fieldErrors.vehicleClassId ?? null} />
         <Input
           label="Notes"
           placeholder="Optional"
@@ -112,7 +103,7 @@ export function FitmentsSection({ partId, fitments, onMutated }: FitmentsSection
           <Button type="submit" variant="primary" size="sm" isLoading={isSubmitting}>
             Add fitment
           </Button>
-          {submitError ? <span className="font-mono text-xs text-accent-400">{submitError}</span> : null}
+          <FormError error={submitError} />
         </div>
       </form>
     </div>

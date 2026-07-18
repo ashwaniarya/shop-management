@@ -15,7 +15,12 @@ export function InventoryEditDialog({ shopId, row, onClose, onSaved }: Inventory
   return (
     <Dialog isOpen={row !== null} onClose={onClose} title={row ? `Stock settings — ${row.part.sku}` : 'Stock settings'}>
       {row ? (
-        <InventorySettingsForm initialItem={row} onSaved={onSaved} submit={(data) => upsertInventoryItem(shopId, row.partId, data)} />
+        <InventorySettingsForm
+          key={row.partId}
+          initialItem={row}
+          onSaved={onSaved}
+          submit={(data) => upsertInventoryItem(shopId, row.partId, data)}
+        />
       ) : null}
     </Dialog>
   );

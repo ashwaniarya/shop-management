@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 
 import type { Manufacturer } from '@shop/shared';
 
@@ -15,15 +15,16 @@ interface UseManufacturersLookupResult {
   error: unknown;
 }
 
+const NO_MANUFACTURERS: Manufacturer[] = [];
+
 export function useManufacturersLookup(): UseManufacturersLookupResult {
   const fetcher = useCallback(() => listManufacturers({ limit: 100 }).then((page) => page.data), []);
   const { data, isLoading, error } = useAsync(fetcher);
-  const manufacturers = data ?? [];
+  const manufacturers = data ?? NO_MANUFACTURERS;
+  const manufacturersById = useMemo(
+    () => new Map(manufacturers.map((manufacturer) => [manufacturer.id, manufacturer])),
+    [manufacturers],
+  );
 
-  return {
-    manufacturers,
-    manufacturersById: new Map(manufacturers.map((manufacturer) => [manufacturer.id, manufacturer])),
-    isLoading,
-    error,
-  };
+  return { manufacturers, manufacturersById, isLoading, error };
 }

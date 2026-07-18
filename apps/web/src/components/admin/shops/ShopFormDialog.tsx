@@ -4,10 +4,9 @@ import { useState } from 'react';
 
 import { FormActions } from '@/components/admin/FormActions';
 import { Dialog } from '@/components/ui/Dialog';
-import { describeError } from '@/components/ui/ErrorState';
 import { Input } from '@/components/ui/Input';
+import { useZodSubmit } from '@/hooks/useZodSubmit';
 import { createShop, updateShop } from '@/lib/api';
-import { getFieldErrors } from '@/lib/zodFieldErrors';
 import { shopCreateSchema, shopUpdateSchema, type Shop } from '@shop/shared';
 
 interface ShopFormDialogProps {
@@ -35,55 +34,27 @@ function ShopForm({ shop, onClose, onSaved }: { shop: Shop | null; onClose: () =
   const [address, setAddress] = useState(shop?.address ?? '');
   const [phone, setPhone] = useState(shop?.phone ?? '');
   const [gstin, setGstin] = useState(shop?.gstin ?? '');
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const closeAfterSave = () => {
+    onSaved();
+    onClose();
+  };
+  const createSubmit = useZodSubmit(shopCreateSchema, createShop, { onSuccess: closeAfterSave });
+  const updateSubmit = useZodSubmit(
+    shopUpdateSchema,
+    (data) => (shop ? updateShop(shop.id, data) : Promise.reject(new Error('No shop selected'))),
+    { onSuccess: closeAfterSave },
+  );
+  const { fieldErrors, submitError, isSubmitting, run } = shop ? updateSubmit : createSubmit;
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    setSubmitError(null);
-
-    const payload = {
+    run({
       name: name.trim(),
       address: nullableOrTrimmed(address),
       phone: nullableOrTrimmed(phone),
       gstin: nullableOrTrimmed(gstin),
-    };
-    // Branched fully (rather than picking a schema with one ternary and the request
-    // function with another) so TypeScript can narrow `parsed.data` against the one
-    // schema actually used in each branch, instead of the union of both.
-    if (shop) {
-      const parsed = shopUpdateSchema.safeParse(payload);
-      if (!parsed.success) {
-        setFieldErrors(getFieldErrors(parsed.error));
-        return;
-      }
-      setFieldErrors({});
-      setIsSubmitting(true);
-      updateShop(shop.id, parsed.data)
-        .then(() => {
-          onSaved();
-          onClose();
-        })
-        .catch((error: unknown) => setSubmitError(describeError(error)))
-        .finally(() => setIsSubmitting(false));
-      return;
-    }
-
-    const parsed = shopCreateSchema.safeParse(payload);
-    if (!parsed.success) {
-      setFieldErrors(getFieldErrors(parsed.error));
-      return;
-    }
-    setFieldErrors({});
-    setIsSubmitting(true);
-    createShop(parsed.data)
-      .then(() => {
-        onSaved();
-        onClose();
-      })
-      .catch((error: unknown) => setSubmitError(describeError(error)))
-      .finally(() => setIsSubmitting(false));
+    });
   }
 
   return (

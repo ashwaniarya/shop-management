@@ -4,10 +4,9 @@ import { useState } from 'react';
 
 import { FormActions } from '@/components/admin/FormActions';
 import { Dialog } from '@/components/ui/Dialog';
-import { describeError } from '@/components/ui/ErrorState';
 import { Input } from '@/components/ui/Input';
+import { useZodSubmit } from '@/hooks/useZodSubmit';
 import { createVehicleMake, updateVehicleMake } from '@/lib/api';
-import { getFieldErrors } from '@/lib/zodFieldErrors';
 import { vehicleMakeCreateSchema, vehicleMakeUpdateSchema, type VehicleMake } from '@shop/shared';
 
 interface VehicleMakeFormDialogProps {
@@ -37,51 +36,22 @@ function VehicleMakeForm({
   onSaved: () => void;
 }) {
   const [name, setName] = useState(vehicleMake?.name ?? '');
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const closeAfterSave = () => {
+    onSaved();
+    onClose();
+  };
+  const createSubmit = useZodSubmit(vehicleMakeCreateSchema, createVehicleMake, { onSuccess: closeAfterSave });
+  const updateSubmit = useZodSubmit(
+    vehicleMakeUpdateSchema,
+    (data) => (vehicleMake ? updateVehicleMake(vehicleMake.id, data) : Promise.reject(new Error('No vehicle make selected'))),
+    { onSuccess: closeAfterSave },
+  );
+  const { fieldErrors, submitError, isSubmitting, run } = vehicleMake ? updateSubmit : createSubmit;
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    setSubmitError(null);
-
-    const payload = { name: name.trim() };
-
-    // Branched fully (rather than picking a schema with one ternary and the request
-    // function with another) so TypeScript can narrow `parsed.data` against the one
-    // schema actually used in each branch, instead of the union of both.
-    if (vehicleMake) {
-      const parsed = vehicleMakeUpdateSchema.safeParse(payload);
-      if (!parsed.success) {
-        setFieldErrors(getFieldErrors(parsed.error));
-        return;
-      }
-      setFieldErrors({});
-      setIsSubmitting(true);
-      updateVehicleMake(vehicleMake.id, parsed.data)
-        .then(() => {
-          onSaved();
-          onClose();
-        })
-        .catch((error: unknown) => setSubmitError(describeError(error)))
-        .finally(() => setIsSubmitting(false));
-      return;
-    }
-
-    const parsed = vehicleMakeCreateSchema.safeParse(payload);
-    if (!parsed.success) {
-      setFieldErrors(getFieldErrors(parsed.error));
-      return;
-    }
-    setFieldErrors({});
-    setIsSubmitting(true);
-    createVehicleMake(parsed.data)
-      .then(() => {
-        onSaved();
-        onClose();
-      })
-      .catch((error: unknown) => setSubmitError(describeError(error)))
-      .finally(() => setIsSubmitting(false));
+    run({ name: name.trim() });
   }
 
   return (

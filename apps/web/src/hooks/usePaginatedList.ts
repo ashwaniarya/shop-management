@@ -58,11 +58,13 @@ export function usePaginatedList<T>(fetchPage: (page: number) => Promise<Paginat
   useEffect(() => {
     const filtersChanged = previousFetchPageRef.current !== null && previousFetchPageRef.current !== fetchPage;
     previousFetchPageRef.current = fetchPage;
-    const pageToLoad = filtersChanged ? 1 : page;
     if (filtersChanged && page !== 1) {
+      // Jump back to page 1 and let this effect's re-run (page changed) do the
+      // single fetch, instead of fetching here AND again after setPage.
       setPage(1);
+      return;
     }
-    runFetch(pageToLoad);
+    runFetch(page);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchPage, page]);
 

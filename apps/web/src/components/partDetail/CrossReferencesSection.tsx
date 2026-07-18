@@ -6,12 +6,12 @@ import { Badge, type BadgeTone } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ConfirmButton } from '@/components/ui/ConfirmButton';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { describeError } from '@/components/ui/ErrorState';
+import { FormError } from '@/components/ui/FormError';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Table, Td, Th, Tr } from '@/components/ui/Table';
+import { useZodSubmit } from '@/hooks/useZodSubmit';
 import { createPartCrossReference, deletePartCrossReference } from '@/lib/api';
-import { getFieldErrors } from '@/lib/zodFieldErrors';
 import { partCrossReferenceCreateSchema, refTypeSchema, type PartCrossReference, type RefType } from '@shop/shared';
 
 const REF_TYPE_TONE: Record<RefType, BadgeTone> = {
@@ -34,37 +34,28 @@ export function CrossReferencesSection({ partId, crossReferences, onMutated }: C
   const [refNumber, setRefNumber] = useState('');
   const [refBrand, setRefBrand] = useState('');
   const [notes, setNotes] = useState('');
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const { fieldErrors, submitError, isSubmitting, run } = useZodSubmit(
+    partCrossReferenceCreateSchema,
+    (data) => createPartCrossReference(partId, data),
+    {
+      onSuccess: () => {
+        setRefNumber('');
+        setRefBrand('');
+        setNotes('');
+        onMutated();
+      },
+    },
+  );
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    setSubmitError(null);
-
-    const parsed = partCrossReferenceCreateSchema.safeParse({
+    run({
       refType,
       refNumber: refNumber.trim(),
       refBrand: refBrand.trim() === '' ? undefined : refBrand.trim(),
       notes: notes.trim() === '' ? undefined : notes.trim(),
     });
-
-    if (!parsed.success) {
-      setFieldErrors(getFieldErrors(parsed.error));
-      return;
-    }
-    setFieldErrors({});
-    setIsSubmitting(true);
-
-    createPartCrossReference(partId, parsed.data)
-      .then(() => {
-        setRefNumber('');
-        setRefBrand('');
-        setNotes('');
-        onMutated();
-      })
-      .catch((error: unknown) => setSubmitError(describeError(error)))
-      .finally(() => setIsSubmitting(false));
   }
 
   return (
@@ -125,7 +116,7 @@ export function CrossReferencesSection({ partId, crossReferences, onMutated }: C
           <Button type="submit" variant="primary" size="sm" isLoading={isSubmitting}>
             Add cross-reference
           </Button>
-          {submitError ? <span className="font-mono text-xs text-accent-400">{submitError}</span> : null}
+          <FormError error={submitError} />
         </div>
       </form>
     </div>

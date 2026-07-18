@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 
 import type { User } from '@shop/shared';
 
@@ -15,15 +15,17 @@ interface UseShopUsersLookupResult {
   error: unknown;
 }
 
+const NO_USERS: User[] = [];
+
 export function useShopUsersLookup(shopId: number | null): UseShopUsersLookupResult {
   const fetcher = useCallback(
-    () => (shopId === null ? Promise.resolve([]) : listShopUsers(shopId, { limit: 100 }).then((page) => page.data)),
+    () => (shopId === null ? Promise.resolve(NO_USERS) : listShopUsers(shopId, { limit: 100 }).then((page) => page.data)),
     [shopId],
   );
   const { data, isLoading, error } = useAsync(fetcher);
 
-  const users = data ?? [];
-  const usersById = new Map(users.map((user) => [user.id, user]));
+  const users = data ?? NO_USERS;
+  const usersById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
 
   return { users, usersById, isLoading, error };
 }

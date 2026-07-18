@@ -4,16 +4,17 @@ import { useCallback, useState } from 'react';
 
 import { InventorySettingsForm } from '@/components/InventorySettingsForm';
 import { Button } from '@/components/ui/Button';
-import { describeError, ErrorState } from '@/components/ui/ErrorState';
+import { ErrorState } from '@/components/ui/ErrorState';
+import { FormError } from '@/components/ui/FormError';
 import { Input } from '@/components/ui/Input';
 import { LoadingBlock } from '@/components/ui/LoadingRow';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { Select } from '@/components/ui/Select';
 import { useAsync } from '@/hooks/useAsync';
 import { useShopUsersLookup } from '@/hooks/useShopUsersLookup';
+import { useZodSubmit } from '@/hooks/useZodSubmit';
 import { ApiError, createStockTransaction, getInventoryItem, upsertInventoryItem } from '@/lib/api';
 import { formatQuantity } from '@/lib/format';
-import { getFieldErrors } from '@/lib/zodFieldErrors';
 import { stockTransactionCreateSchema, type StockTransactionType } from '@shop/shared';
 
 const MOVEMENT_TYPE_OPTIONS: { value: StockTransactionType; label: string }[] = [
@@ -46,15 +47,24 @@ export function StockSection({ partId, shopId }: StockSectionProps) {
   const [unitPriceText, setUnitPriceText] = useState('');
   const [userId, setUserId] = useState<number | ''>('');
   const [movementNotes, setMovementNotes] = useState('');
-  const [movementFieldErrors, setMovementFieldErrors] = useState<Record<string, string>>({});
-  const [movementSubmitError, setMovementSubmitError] = useState<string | null>(null);
-  const [isSubmittingMovement, setIsSubmittingMovement] = useState(false);
+
+  const {
+    fieldErrors: movementFieldErrors,
+    submitError: movementSubmitError,
+    isSubmitting: isSubmittingMovement,
+    run: runMovement,
+  } = useZodSubmit(stockTransactionCreateSchema, (data) => createStockTransaction(shopId, data), {
+    onSuccess: () => {
+      setQuantityText('');
+      setUnitPriceText('');
+      setMovementNotes('');
+      refetchInventory();
+    },
+  });
 
   function handleMovementSubmit(event: React.FormEvent) {
     event.preventDefault();
-    setMovementSubmitError(null);
-
-    const parsed = stockTransactionCreateSchema.safeParse({
+    runMovement({
       partId,
       userId: userId === '' ? undefined : userId,
       type: movementType,
@@ -62,23 +72,6 @@ export function StockSection({ partId, shopId }: StockSectionProps) {
       unitPrice: unitPriceText.trim() === '' ? undefined : Number(unitPriceText),
       notes: movementNotes.trim() === '' ? undefined : movementNotes.trim(),
     });
-
-    if (!parsed.success) {
-      setMovementFieldErrors(getFieldErrors(parsed.error));
-      return;
-    }
-    setMovementFieldErrors({});
-    setIsSubmittingMovement(true);
-
-    createStockTransaction(shopId, parsed.data)
-      .then(() => {
-        setQuantityText('');
-        setUnitPriceText('');
-        setMovementNotes('');
-        refetchInventory();
-      })
-      .catch((submitError: unknown) => setMovementSubmitError(describeError(submitError)))
-      .finally(() => setIsSubmittingMovement(false));
   }
 
   if (isLoading) {
@@ -177,7 +170,7 @@ export function StockSection({ partId, shopId }: StockSectionProps) {
             <Button type="submit" variant="primary" size="sm" isLoading={isSubmittingMovement}>
               Post movement
             </Button>
-            {movementSubmitError ? <span className="font-mono text-xs text-accent-400">{movementSubmitError}</span> : null}
+            <FormError error={movementSubmitError} />
           </div>
         </form>
       </div>

@@ -1,4 +1,5 @@
 import { PartActiveBadge } from '@/components/PartActiveBadge';
+import { Button } from '@/components/ui/Button';
 import { formatCurrency } from '@/lib/format';
 import type { Part } from '@shop/shared';
 
@@ -6,9 +7,10 @@ interface PartHeaderCardProps {
   part: Part;
   manufacturerName: string;
   categoryName: string;
+  onEdit?: () => void;
 }
 
-export function PartHeaderCard({ part, manufacturerName, categoryName }: PartHeaderCardProps) {
+export function PartHeaderCard({ part, manufacturerName, categoryName, onEdit }: PartHeaderCardProps) {
   return (
     <div className="rounded-md border border-ink-800 bg-ink-900 p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -16,7 +18,14 @@ export function PartHeaderCard({ part, manufacturerName, categoryName }: PartHea
           <p className="font-mono text-xs tracking-wide text-ink-500">{part.sku}</p>
           <h1 className="font-display mt-1 text-2xl font-bold tracking-wide text-ink-50 uppercase">{part.name}</h1>
         </div>
-        <PartActiveBadge isActive={part.isActive} />
+        <div className="flex items-center gap-2.5">
+          <PartActiveBadge isActive={part.isActive} />
+          {onEdit ? (
+            <Button variant="secondary" size="sm" onClick={onEdit}>
+              Edit
+            </Button>
+          ) : null}
+        </div>
       </div>
       <dl className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 
 import type { Shop } from '@shop/shared';
 
@@ -23,6 +23,7 @@ interface ShopContextValue {
   isLoading: boolean;
   selectedShopId: number | null;
   setSelectedShopId: (shopId: number | null) => void;
+  refreshShops: () => Promise<void>;
 }
 
 const ShopContext = createContext<ShopContextValue | undefined>(undefined);
@@ -31,6 +32,20 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   const [shops, setShops] = useState<Shop[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedShopId, setSelectedShopIdState] = useState<number | null>(null);
+
+  // Re-fetches the shop list and re-resolves the selection against it, so admin
+  // mutations (create/rename/deactivate) show up in the header selector without a
+  // reload. The functional update reads the latest selection rather than closing
+  // over a stale one, keeping this callback's identity stable across renders.
+  const refreshShops = useCallback(async () => {
+    const page = await listShops({ limit: 100 });
+    setShops(page.data);
+    setSelectedShopIdState((currentShopId) => {
+      const resolvedShopId = resolveSelectedShopId(currentShopId, page.data);
+      persistSelectedShopId(resolvedShopId);
+      return resolvedShopId;
+    });
+  }, []);
 
   useEffect(() => {
     const storedShopId = window.localStorage.getItem(SELECTED_SHOP_STORAGE_KEY);
@@ -59,7 +74,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <ShopContext.Provider value={{ shops, isLoading, selectedShopId, setSelectedShopId }}>
+    <ShopContext.Provider value={{ shops, isLoading, selectedShopId, setSelectedShopId, refreshShops }}>
       {children}
     </ShopContext.Provider>
   );

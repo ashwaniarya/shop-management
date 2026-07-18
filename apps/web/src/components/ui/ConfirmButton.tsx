@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 
+import { describeError } from '@/lib/describeError';
+
 import { Button } from './Button';
-import { describeError } from './ErrorState';
+import { FormError } from './FormError';
 
 type ConfirmState = 'idle' | 'confirming' | 'pending';
 
@@ -36,7 +38,10 @@ export function ConfirmButton({
 
   return (
     <span className="inline-flex items-center gap-1.5">
+      {/* autoFocus: the trigger button unmounts on the idle→confirming swap, so
+          without it keyboard focus would fall back to <body> mid-flow. */}
       <Button
+        autoFocus
         variant="outline-danger"
         size="sm"
         isLoading={state === 'pending'}
@@ -55,7 +60,7 @@ export function ConfirmButton({
       <Button variant="ghost" size="sm" disabled={state === 'pending'} onClick={() => setState('idle')}>
         Cancel
       </Button>
-      {error ? <span className="font-mono text-xs text-accent-400">{error}</span> : null}
+      <FormError error={error} />
     </span>
   );
 }

@@ -12,6 +12,7 @@ import { LoadingRow } from '@/components/ui/LoadingRow';
 import { Pagination } from '@/components/ui/Pagination';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { Table, Td, Th, Tr } from '@/components/ui/Table';
+import { useShop } from '@/context/ShopContext';
 import { usePaginatedList } from '@/hooks/usePaginatedList';
 import { listShops, softDeleteShop, updateShop } from '@/lib/api';
 import type { Shop } from '@shop/shared';
@@ -27,7 +28,15 @@ export function ShopsTable({ onManageUsers }: { onManageUsers: (shop: Shop) => v
 
   const fetchPage = useCallback((page: number) => listShops({ page, limit: PAGE_SIZE }), []);
   const { data: shops, meta, isLoading, error, page, setPage, refetch } = usePaginatedList(fetchPage);
+  const { refreshShops } = useShop();
   const visibleRows = filterByActiveState(shops, activeFilter);
+
+  // Every shop mutation refreshes both this table AND the app-wide shop context,
+  // so the header's shop selector reflects renames/adds/deactivations immediately.
+  function handleShopsMutated() {
+    refetch();
+    void refreshShops();
+  }
 
   if (error) {
     return <ErrorState error={error} onRetry={refetch} title="Could not load shops" />;
@@ -92,8 +101,8 @@ export function ShopsTable({ onManageUsers }: { onManageUsers: (shop: Shop) => v
                     </Button>
                     <ActivationAction
                       isActive={shop.isActive}
-                      onDeactivate={() => softDeleteShop(shop.id).then(refetch)}
-                      onReactivate={() => updateShop(shop.id, { isActive: true }).then(() => refetch())}
+                      onDeactivate={() => softDeleteShop(shop.id).then(handleShopsMutated)}
+                      onReactivate={() => updateShop(shop.id, { isActive: true }).then(handleShopsMutated)}
                     />
                   </span>
                 </Td>
@@ -108,7 +117,7 @@ export function ShopsTable({ onManageUsers }: { onManageUsers: (shop: Shop) => v
         shop={dialogTarget === 'new' || dialogTarget === null ? null : dialogTarget}
         isOpen={dialogTarget !== null}
         onClose={() => setDialogTarget(null)}
-        onSaved={refetch}
+        onSaved={handleShopsMutated}
       />
     </div>
   );

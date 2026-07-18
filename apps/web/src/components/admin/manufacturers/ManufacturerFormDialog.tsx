@@ -4,10 +4,9 @@ import { useState } from 'react';
 
 import { FormActions } from '@/components/admin/FormActions';
 import { Dialog } from '@/components/ui/Dialog';
-import { describeError } from '@/components/ui/ErrorState';
 import { Input } from '@/components/ui/Input';
+import { useZodSubmit } from '@/hooks/useZodSubmit';
 import { createManufacturer, updateManufacturer } from '@/lib/api';
-import { getFieldErrors } from '@/lib/zodFieldErrors';
 import { manufacturerCreateSchema, manufacturerUpdateSchema, type Manufacturer } from '@shop/shared';
 
 interface ManufacturerFormDialogProps {
@@ -45,51 +44,22 @@ function ManufacturerForm({
 }) {
   const [name, setName] = useState(manufacturer?.name ?? '');
   const [code, setCode] = useState(manufacturer?.code ?? '');
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const closeAfterSave = () => {
+    onSaved();
+    onClose();
+  };
+  const createSubmit = useZodSubmit(manufacturerCreateSchema, createManufacturer, { onSuccess: closeAfterSave });
+  const updateSubmit = useZodSubmit(
+    manufacturerUpdateSchema,
+    (data) => (manufacturer ? updateManufacturer(manufacturer.id, data) : Promise.reject(new Error('No manufacturer selected'))),
+    { onSuccess: closeAfterSave },
+  );
+  const { fieldErrors, submitError, isSubmitting, run } = manufacturer ? updateSubmit : createSubmit;
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    setSubmitError(null);
-
-    const payload = { name: name.trim(), code: code.trim() === '' ? null : code.trim() };
-
-    // Branched fully (rather than picking a schema with one ternary and the request
-    // function with another) so TypeScript can narrow `parsed.data` against the one
-    // schema actually used in each branch, instead of the union of both.
-    if (manufacturer) {
-      const parsed = manufacturerUpdateSchema.safeParse(payload);
-      if (!parsed.success) {
-        setFieldErrors(getFieldErrors(parsed.error));
-        return;
-      }
-      setFieldErrors({});
-      setIsSubmitting(true);
-      updateManufacturer(manufacturer.id, parsed.data)
-        .then(() => {
-          onSaved();
-          onClose();
-        })
-        .catch((error: unknown) => setSubmitError(describeError(error)))
-        .finally(() => setIsSubmitting(false));
-      return;
-    }
-
-    const parsed = manufacturerCreateSchema.safeParse(payload);
-    if (!parsed.success) {
-      setFieldErrors(getFieldErrors(parsed.error));
-      return;
-    }
-    setFieldErrors({});
-    setIsSubmitting(true);
-    createManufacturer(parsed.data)
-      .then(() => {
-        onSaved();
-        onClose();
-      })
-      .catch((error: unknown) => setSubmitError(describeError(error)))
-      .finally(() => setIsSubmitting(false));
+    run({ name: name.trim(), code: code.trim() === '' ? null : code.trim() });
   }
 
   return (

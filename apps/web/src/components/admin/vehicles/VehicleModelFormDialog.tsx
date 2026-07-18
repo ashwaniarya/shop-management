@@ -4,11 +4,10 @@ import { useState } from 'react';
 
 import { FormActions } from '@/components/admin/FormActions';
 import { Dialog } from '@/components/ui/Dialog';
-import { describeError } from '@/components/ui/ErrorState';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
+import { useZodSubmit } from '@/hooks/useZodSubmit';
 import { createVehicleModel, updateVehicleModel } from '@/lib/api';
-import { getFieldErrors } from '@/lib/zodFieldErrors';
 import { vehicleModelCreateSchema, vehicleModelUpdateSchema, type VehicleClass, type VehicleMake, type VehicleModel } from '@shop/shared';
 
 interface VehicleModelFormDialogProps {
@@ -63,54 +62,26 @@ function VehicleModelForm({
   const [name, setName] = useState(vehicleModel?.name ?? '');
   const [vehicleMakeId, setVehicleMakeId] = useState<number | ''>(vehicleModel?.vehicleMakeId ?? '');
   const [vehicleClassId, setVehicleClassId] = useState<number | ''>(vehicleModel?.vehicleClassId ?? '');
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const closeAfterSave = () => {
+    onSaved();
+    onClose();
+  };
+  const createSubmit = useZodSubmit(vehicleModelCreateSchema, createVehicleModel, { onSuccess: closeAfterSave });
+  const updateSubmit = useZodSubmit(
+    vehicleModelUpdateSchema,
+    (data) => (vehicleModel ? updateVehicleModel(vehicleModel.id, data) : Promise.reject(new Error('No vehicle model selected'))),
+    { onSuccess: closeAfterSave },
+  );
+  const { fieldErrors, submitError, isSubmitting, run } = vehicleModel ? updateSubmit : createSubmit;
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    setSubmitError(null);
-
-    const payload = {
+    run({
       name: name.trim(),
       vehicleMakeId: vehicleMakeId === '' ? undefined : vehicleMakeId,
       vehicleClassId: vehicleClassId === '' ? undefined : vehicleClassId,
-    };
-    // Branched fully (rather than picking a schema with one ternary and the request
-    // function with another) so TypeScript can narrow `parsed.data` against the one
-    // schema actually used in each branch, instead of the union of both.
-    if (vehicleModel) {
-      const parsed = vehicleModelUpdateSchema.safeParse(payload);
-      if (!parsed.success) {
-        setFieldErrors(getFieldErrors(parsed.error));
-        return;
-      }
-      setFieldErrors({});
-      setIsSubmitting(true);
-      updateVehicleModel(vehicleModel.id, parsed.data)
-        .then(() => {
-          onSaved();
-          onClose();
-        })
-        .catch((error: unknown) => setSubmitError(describeError(error)))
-        .finally(() => setIsSubmitting(false));
-      return;
-    }
-
-    const parsed = vehicleModelCreateSchema.safeParse(payload);
-    if (!parsed.success) {
-      setFieldErrors(getFieldErrors(parsed.error));
-      return;
-    }
-    setFieldErrors({});
-    setIsSubmitting(true);
-    createVehicleModel(parsed.data)
-      .then(() => {
-        onSaved();
-        onClose();
-      })
-      .catch((error: unknown) => setSubmitError(describeError(error)))
-      .finally(() => setIsSubmitting(false));
+    });
   }
 
   return (

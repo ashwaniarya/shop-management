@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 
 import type { Category } from '@shop/shared';
 
@@ -15,10 +15,13 @@ interface UseCategoriesLookupResult {
   error: unknown;
 }
 
+const NO_CATEGORIES: Category[] = [];
+
 export function useCategoriesLookup(): UseCategoriesLookupResult {
   const fetcher = useCallback(() => listCategories({ limit: 100 }).then((page) => page.data), []);
   const { data, isLoading, error } = useAsync(fetcher);
-  const categories = data ?? [];
+  const categories = data ?? NO_CATEGORIES;
+  const categoriesById = useMemo(() => new Map(categories.map((category) => [category.id, category])), [categories]);
 
-  return { categories, categoriesById: new Map(categories.map((category) => [category.id, category])), isLoading, error };
+  return { categories, categoriesById, isLoading, error };
 }

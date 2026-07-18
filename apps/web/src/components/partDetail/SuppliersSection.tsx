@@ -5,13 +5,13 @@ import { useCallback, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { ConfirmButton } from '@/components/ui/ConfirmButton';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { describeError } from '@/components/ui/ErrorState';
+import { FormError } from '@/components/ui/FormError';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Table, Td, Th, Tr } from '@/components/ui/Table';
 import { useAsync } from '@/hooks/useAsync';
+import { useZodSubmit } from '@/hooks/useZodSubmit';
 import { createPartSupplier, deletePartSupplier, listSuppliers, updatePartSupplier, type SupplierPartExpanded } from '@/lib/api';
-import { getFieldErrors } from '@/lib/zodFieldErrors';
 import { supplierPartCreateSchema, supplierPartUpdateSchema } from '@shop/shared';
 
 function PreferredStar({ isPreferred }: { isPreferred: boolean }) {
@@ -35,68 +35,55 @@ export function SuppliersSection({ partId, suppliers, onMutated }: SuppliersSect
   const [supplierId, setSupplierId] = useState<number | ''>('');
   const [supplierPartNumber, setSupplierPartNumber] = useState('');
   const [isPreferred, setIsPreferred] = useState(false);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editNumber, setEditNumber] = useState('');
   const [editPreferred, setEditPreferred] = useState(false);
-  const [editError, setEditError] = useState<string | null>(null);
-  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  const addSubmit = useZodSubmit(supplierPartCreateSchema, (data) => createPartSupplier(partId, data), {
+    onSuccess: () => {
+      setSupplierId('');
+      setSupplierPartNumber('');
+      setIsPreferred(false);
+      onMutated();
+    },
+  });
+
+  const editSubmit = useZodSubmit(
+    supplierPartUpdateSchema,
+    (data) =>
+      editingId === null
+        ? Promise.reject(new Error('No supplier link selected'))
+        : updatePartSupplier(partId, editingId, data),
+    {
+      onSuccess: () => {
+        setEditingId(null);
+        onMutated();
+      },
+    },
+  );
 
   function handleAddSubmit(event: React.FormEvent) {
     event.preventDefault();
-    setSubmitError(null);
-
-    const parsed = supplierPartCreateSchema.safeParse({
+    addSubmit.run({
       supplierId: supplierId === '' ? undefined : supplierId,
       supplierPartNumber: supplierPartNumber.trim() === '' ? undefined : supplierPartNumber.trim(),
       isPreferred,
     });
-
-    if (!parsed.success) {
-      setFieldErrors(getFieldErrors(parsed.error));
-      return;
-    }
-    setFieldErrors({});
-    setIsSubmitting(true);
-
-    createPartSupplier(partId, parsed.data)
-      .then(() => {
-        setSupplierId('');
-        setSupplierPartNumber('');
-        setIsPreferred(false);
-        onMutated();
-      })
-      .catch((error: unknown) => setSubmitError(describeError(error)))
-      .finally(() => setIsSubmitting(false));
   }
 
   function startEdit(supplierPart: SupplierPartExpanded) {
     setEditingId(supplierPart.id);
     setEditNumber(supplierPart.supplierPartNumber ?? '');
     setEditPreferred(supplierPart.isPreferred);
-    setEditError(null);
+    editSubmit.reset();
   }
 
-  function saveEdit(supplierPartId: number) {
-    const parsed = supplierPartUpdateSchema.safeParse({
+  function saveEdit() {
+    editSubmit.run({
       supplierPartNumber: editNumber.trim() === '' ? null : editNumber.trim(),
       isPreferred: editPreferred,
     });
-    if (!parsed.success) {
-      setEditError(Object.values(getFieldErrors(parsed.error))[0] ?? 'Invalid input');
-      return;
-    }
-    setIsSavingEdit(true);
-    updatePartSupplier(partId, supplierPartId, parsed.data)
-      .then(() => {
-        setEditingId(null);
-        onMutated();
-      })
-      .catch((error: unknown) => setEditError(describeError(error)))
-      .finally(() => setIsSavingEdit(false));
   }
 
   return (
@@ -125,6 +112,7 @@ export function SuppliersSection({ partId, suppliers, onMutated }: SuppliersSect
                         aria-label="Supplier part number"
                         value={editNumber}
                         onChange={(event) => setEditNumber(event.target.value)}
+                        error={editSubmit.fieldErrors.supplierPartNumber}
                         className="h-7 text-xs"
                       />
                     ) : (
@@ -149,13 +137,13 @@ export function SuppliersSection({ partId, suppliers, onMutated }: SuppliersSect
                   <Td align="right">
                     {isEditing ? (
                       <span className="inline-flex items-center gap-1.5">
-                        <Button variant="primary" size="sm" isLoading={isSavingEdit} onClick={() => saveEdit(supplierPart.id)}>
+                        <Button variant="primary" size="sm" isLoading={editSubmit.isSubmitting} onClick={saveEdit}>
                           Save
                         </Button>
-                        <Button variant="ghost" size="sm" disabled={isSavingEdit} onClick={() => setEditingId(null)}>
+                        <Button variant="ghost" size="sm" disabled={editSubmit.isSubmitting} onClick={() => setEditingId(null)}>
                           Cancel
                         </Button>
-                        {editError ? <span className="font-mono text-xs text-accent-400">{editError}</span> : null}
+                        <FormError error={editSubmit.fieldErrors.isPreferred ?? editSubmit.submitError} />
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1.5">
@@ -181,7 +169,7 @@ export function SuppliersSection({ partId, suppliers, onMutated }: SuppliersSect
             required
             value={supplierId}
             onChange={(event) => setSupplierId(event.target.value === '' ? '' : Number(event.target.value))}
-            error={fieldErrors.supplierId}
+            error={addSubmit.fieldErrors.supplierId}
           >
             <option value="">Select a supplier…</option>
             {(supplierOptions ?? []).map((supplier) => (
@@ -195,6 +183,7 @@ export function SuppliersSection({ partId, suppliers, onMutated }: SuppliersSect
             placeholder="Optional"
             value={supplierPartNumber}
             onChange={(event) => setSupplierPartNumber(event.target.value)}
+            error={addSubmit.fieldErrors.supplierPartNumber}
             className="font-mono"
           />
           <div className="flex items-end pb-2">
@@ -210,10 +199,10 @@ export function SuppliersSection({ partId, suppliers, onMutated }: SuppliersSect
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <Button type="submit" variant="primary" size="sm" isLoading={isSubmitting}>
+          <Button type="submit" variant="primary" size="sm" isLoading={addSubmit.isSubmitting}>
             Link supplier
           </Button>
-          {submitError ? <span className="font-mono text-xs text-accent-400">{submitError}</span> : null}
+          <FormError error={addSubmit.submitError} />
         </div>
       </form>
     </div>

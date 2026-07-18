@@ -8,6 +8,7 @@ import { MovementHistorySection } from '@/components/partDetail/MovementHistoryS
 import { PartHeaderCard } from '@/components/partDetail/PartHeaderCard';
 import { StockSection } from '@/components/partDetail/StockSection';
 import { SuppliersSection } from '@/components/partDetail/SuppliersSection';
+import { PartFormDialog } from '@/components/parts/PartFormDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { LoadingBlock } from '@/components/ui/LoadingRow';
@@ -34,11 +35,12 @@ function isTabKey(value: string | null): value is TabKey {
 export function PartDetailView({ partId }: { partId: number }) {
   const fetcher = useCallback(() => getPart360(partId, ['fitments', 'crossReferences', 'suppliers']), [partId]);
   const { data: part, isLoading, error, retry: refetchPart } = useAsync(fetcher);
-  const { categoriesById } = useCategoriesLookup();
-  const { manufacturersById } = useManufacturersLookup();
+  const { categories, categoriesById } = useCategoriesLookup();
+  const { manufacturers, manufacturersById } = useManufacturersLookup();
   const { selectedShopId } = useShop();
 
   const [activeTab, setActiveTab] = useState<TabKey>('fitments');
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 
   // Lets links from the dashboard/ledger deep-link into a specific tab (e.g.
   // "?tab=stock") without pulling in next/navigation's useSearchParams, which would
@@ -66,6 +68,16 @@ export function PartDetailView({ partId }: { partId: number }) {
         part={part}
         manufacturerName={manufacturersById.get(part.manufacturerId)?.name ?? `#${part.manufacturerId}`}
         categoryName={categoriesById.get(part.categoryId)?.name ?? `#${part.categoryId}`}
+        onEdit={() => setIsEditDialogOpen(true)}
+      />
+
+      <PartFormDialog
+        part={part}
+        manufacturers={manufacturers}
+        categories={categories}
+        isOpen={isEditDialogOpen}
+        onClose={() => setIsEditDialogOpen(false)}
+        onSaved={refetchPart}
       />
 
       <div>

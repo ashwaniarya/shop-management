@@ -4,10 +4,9 @@ import { useState } from 'react';
 
 import { FormActions } from '@/components/admin/FormActions';
 import { Dialog } from '@/components/ui/Dialog';
-import { describeError } from '@/components/ui/ErrorState';
 import { Input } from '@/components/ui/Input';
+import { useZodSubmit } from '@/hooks/useZodSubmit';
 import { createVehicleClass, updateVehicleClass } from '@/lib/api';
-import { getFieldErrors } from '@/lib/zodFieldErrors';
 import { vehicleClassCreateSchema, vehicleClassUpdateSchema, type VehicleClass } from '@shop/shared';
 
 interface VehicleClassFormDialogProps {
@@ -43,53 +42,25 @@ function VehicleClassForm({
 }) {
   const [name, setName] = useState(vehicleClass?.name ?? '');
   const [displayOrder, setDisplayOrder] = useState(vehicleClass ? String(vehicleClass.displayOrder) : '0');
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const closeAfterSave = () => {
+    onSaved();
+    onClose();
+  };
+  const createSubmit = useZodSubmit(vehicleClassCreateSchema, createVehicleClass, { onSuccess: closeAfterSave });
+  const updateSubmit = useZodSubmit(
+    vehicleClassUpdateSchema,
+    (data) => (vehicleClass ? updateVehicleClass(vehicleClass.id, data) : Promise.reject(new Error('No vehicle class selected'))),
+    { onSuccess: closeAfterSave },
+  );
+  const { fieldErrors, submitError, isSubmitting, run } = vehicleClass ? updateSubmit : createSubmit;
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    setSubmitError(null);
-
-    const payload = {
+    run({
       name: name.trim(),
       displayOrder: displayOrder.trim() === '' ? undefined : Number(displayOrder),
-    };
-    // Branched fully (rather than picking a schema with one ternary and the request
-    // function with another) so TypeScript can narrow `parsed.data` against the one
-    // schema actually used in each branch, instead of the union of both.
-    if (vehicleClass) {
-      const parsed = vehicleClassUpdateSchema.safeParse(payload);
-      if (!parsed.success) {
-        setFieldErrors(getFieldErrors(parsed.error));
-        return;
-      }
-      setFieldErrors({});
-      setIsSubmitting(true);
-      updateVehicleClass(vehicleClass.id, parsed.data)
-        .then(() => {
-          onSaved();
-          onClose();
-        })
-        .catch((error: unknown) => setSubmitError(describeError(error)))
-        .finally(() => setIsSubmitting(false));
-      return;
-    }
-
-    const parsed = vehicleClassCreateSchema.safeParse(payload);
-    if (!parsed.success) {
-      setFieldErrors(getFieldErrors(parsed.error));
-      return;
-    }
-    setFieldErrors({});
-    setIsSubmitting(true);
-    createVehicleClass(parsed.data)
-      .then(() => {
-        onSaved();
-        onClose();
-      })
-      .catch((error: unknown) => setSubmitError(describeError(error)))
-      .finally(() => setIsSubmitting(false));
+    });
   }
 
   return (
