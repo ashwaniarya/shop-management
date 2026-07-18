@@ -12,3 +12,13 @@ describe('GET /health', () => {
     expect(response.body).toEqual({ status: 'ok' });
   });
 });
+
+describe('GET /docs', () => {
+  it('serves the Swagger UI as HTML', async () => {
+    const response = await request(app).get('/docs/');
+
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toMatch(/html/);
+    expect(response.text).toContain('swagger-ui');
+  });
+});

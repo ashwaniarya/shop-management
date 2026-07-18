@@ -3,10 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "build": "tsc -p tsconfig.build.json",
+    "dev": "pnpm --filter @shop/shared build && tsx watch src/server.ts",
+    "build": "pnpm --filter @shop/shared build && tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
-    "test": "vitest run",
+    "test": "pnpm --filter @shop/shared build && vitest run",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts"
   },
@@ -15,9 +15,12 @@
   },
   "dependencies": {
     "@prisma/client": "6",
+    "@shop/shared": "workspace:*",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "4",
+    "swagger-ui-express": "^5.0.1",
+    "yaml": "^2.6.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -25,6 +28,7 @@
     "@types/express": "^4.17.25",
     "@types/node": "^26.1.1",
     "@types/supertest": "^7.2.1",
+    "@types/swagger-ui-express": "^4.1.6",
     "prisma": "6",
     "supertest": "^7.2.2",
     "tsx": "^4.23.1",

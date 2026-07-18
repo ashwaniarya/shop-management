@@ -2385,6 +2385,10 @@ components:
               type: integer
             quantity:
               type: number
+              description: >-
+                The absolute value of the net signed sum of adjustment rows
+                (positive and negative adjustments offset each other before
+                the absolute value is taken).
 
     PartSearchResult:
       description: A part matched by a number search, with details of what matched.
