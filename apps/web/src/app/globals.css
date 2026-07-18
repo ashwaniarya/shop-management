@@ -1,5 +1,103 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sans: var(--font-sans-src), "Segoe UI", system-ui, sans-serif;
+  --font-mono: var(--font-mono-src), ui-monospace, "SFMono-Regular", monospace;
+  --font-display: var(--font-display-src), "Arial Narrow", sans-serif;
+
+  --color-ink-950: #0d0e10;
+  --color-ink-900: #16181b;
+  --color-ink-850: #1c1f23;
+  --color-ink-800: #23262b;
+  --color-ink-750: #292d33;
+  --color-ink-700: #2e3238;
+  --color-ink-600: #43484f;
+  --color-ink-500: #5b6169;
+  --color-ink-400: #8a9099;
+  --color-ink-300: #aeb3ba;
+  --color-ink-200: #c7cbd1;
+  --color-ink-100: #dde0e3;
+  --color-ink-50: #f4f3ef;
+
+  --color-accent-950: #2b1608;
+  --color-accent-900: #3a1f0e;
+  --color-accent-800: #5c2c10;
+  --color-accent-700: #b04d18;
+  --color-accent-600: #e35f1e;
+  --color-accent-500: #ff7a29;
+  --color-accent-400: #ff9354;
+  --color-accent-300: #ffb27d;
+
+  --color-positive-900: #16211b;
+  --color-positive-700: #2f5c46;
+  --color-positive-500: #6fa98a;
+  --color-positive-300: #a8d1bb;
+
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+}
+
+html {
+  color-scheme: dark;
+}
+
 body {
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-ink-950);
+  color: var(--color-ink-100);
+  font-family: var(--font-sans);
+  font-feature-settings: "cv05", "cv11";
+}
+
+* {
+  border-color: var(--color-ink-800);
+}
+
+::selection {
+  background-color: var(--color-accent-500);
+  color: var(--color-ink-950);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent-500);
+  outline-offset: 2px;
+}
+
+/* Instrument-panel graticule: a faint two-axis grid, never louder than the data
+   sitting on top of it. Applied once on the main content surface. */
+.bg-graticule {
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--color-ink-50) 4%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--color-ink-50) 4%, transparent) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.scrollbar-instrument {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-ink-700) transparent;
+}
+
+.scrollbar-instrument::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+.scrollbar-instrument::-webkit-scrollbar-thumb {
+  background-color: var(--color-ink-700);
+  border-radius: var(--radius-sm);
+}
+
+@keyframes pulse-skeleton {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.animate-skeleton {
+  animation: pulse-skeleton 1.4s ease-in-out infinite;
 }
