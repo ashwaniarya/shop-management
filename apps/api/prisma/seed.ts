@@ -593,6 +593,9 @@ async function main() {
 
       for (const stock of openingStock) {
         const partId = partIdBySku[stock.partSku];
+        if (partId === undefined) {
+          throw new Error(`openingStock references unknown SKU ${stock.partSku}`);
+        }
 
         const inventoryItem = await tx.inventoryItem.create({
           data: {
@@ -629,6 +632,7 @@ async function main() {
   const inventoryItems = await prisma.inventoryItem.findMany();
   const purchasedSums = await prisma.stockTransaction.groupBy({
     by: ['shopId', 'partId'],
+    where: { type: StockTransactionType.PURCHASE },
     _sum: { quantity: true },
   });
   const purchasedSumByKey = new Map(
@@ -641,8 +645,9 @@ async function main() {
   });
 
   if (ledgerMismatches.length > 0) {
-    console.error(`Ledger invariant FAILED for ${ledgerMismatches.length} inventory item(s):`, ledgerMismatches);
-    process.exit(1);
+    throw new Error(
+      `Ledger invariant FAILED for ${ledgerMismatches.length} inventory item(s): ${JSON.stringify(ledgerMismatches)}`,
+    );
   }
 
   const [
@@ -688,7 +693,7 @@ async function main() {
 main()
   .catch((error) => {
     console.error(error);
-    process.exit(1);
+    process.exitCode = 1;
   })
   .finally(async () => {
     await prisma.$disconnect();

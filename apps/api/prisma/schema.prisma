@@ -167,6 +167,7 @@ model PartFitment {
   // enforced by three partial unique indexes added via raw SQL in the init
   // migration (one per specificity rung). This @@unique stays for Prisma's
   // typed unique queries on fully-specified rows.
+  // Review generated migrations: these three partial indexes must never be dropped.
   @@unique([partId, vehicleClassId, vehicleMakeId, vehicleModelId])
   @@index([vehicleClassId, vehicleMakeId, vehicleModelId])
   @@map("part_fitment")

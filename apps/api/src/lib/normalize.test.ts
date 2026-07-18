@@ -19,4 +19,12 @@ describe('normalizeNumber', () => {
   it('returns an empty string for empty input', () => {
     expect(normalizeNumber('')).toBe('');
   });
+
+  it('passes digits-only input through unchanged', () => {
+    expect(normalizeNumber('4711')).toBe('4711');
+  });
+
+  it('strips unicode letters instead of transliterating them', () => {
+    expect(normalizeNumber('MÜLLER-123')).toBe('MLLER123');
+  });
 });
