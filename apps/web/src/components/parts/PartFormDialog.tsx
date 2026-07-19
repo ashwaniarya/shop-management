@@ -1,20 +1,30 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
+import { CopyOfPartPicker, type CopyOfPartSelection } from '@/components/parts/CopyOfPartPicker';
 import { FormActions } from '@/components/ui/FormActions';
 import { Dialog } from '@/components/ui/Dialog';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { useZodSubmit } from '@/hooks/useZodSubmit';
-import { ApiError, createPart, updatePart } from '@/lib/api';
+import { ApiError, createPart, getPart360, updatePart } from '@/lib/api';
 import { buildCategoryOptions } from '@/lib/categoryTree';
-import { partCreateSchema, partUpdateSchema, type Category, type Manufacturer, type Part } from '@shop/shared';
+import {
+  partCreateSchema,
+  partUpdateSchema,
+  type Category,
+  type Manufacturer,
+  type Part,
+  type PartGrade,
+} from '@shop/shared';
 
 interface PartFormDialogProps {
   part: Part | null;
   manufacturers: Manufacturer[];
   categories: Category[];
+  // Optional until the part-detail edit call site (a parallel change) threads grades in.
+  partGrades?: PartGrade[];
   isOpen: boolean;
   onClose: () => void;
   onSaved: (part: Part) => void;
@@ -32,7 +42,15 @@ function rethrowWithDuplicateNumberMessage(error: unknown): never {
   throw error;
 }
 
-export function PartFormDialog({ part, manufacturers, categories, isOpen, onClose, onSaved }: PartFormDialogProps) {
+export function PartFormDialog({
+  part,
+  manufacturers,
+  categories,
+  partGrades = [],
+  isOpen,
+  onClose,
+  onSaved,
+}: PartFormDialogProps) {
   return (
     <Dialog isOpen={isOpen} onClose={onClose} title={part ? `Edit part — ${part.sku}` : 'New part'}>
       {isOpen ? (
@@ -41,6 +59,7 @@ export function PartFormDialog({ part, manufacturers, categories, isOpen, onClos
           part={part}
           manufacturers={manufacturers}
           categories={categories}
+          partGrades={partGrades}
           onClose={onClose}
           onSaved={onSaved}
         />
@@ -53,12 +72,14 @@ function PartForm({
   part,
   manufacturers,
   categories,
+  partGrades,
   onClose,
   onSaved,
 }: {
   part: Part | null;
   manufacturers: Manufacturer[];
   categories: Category[];
+  partGrades: PartGrade[];
   onClose: () => void;
   onSaved: (part: Part) => void;
 }) {
@@ -70,7 +91,36 @@ function PartForm({
   const [description, setDescription] = useState(part?.description ?? '');
   const [unitOfMeasure, setUnitOfMeasure] = useState(part?.unitOfMeasure ?? 'piece');
   const [mrp, setMrp] = useState(part?.mrp?.toString() ?? '');
+  const [gradeId, setGradeId] = useState<number | ''>(part?.gradeId ?? '');
+  // Seeded with an id-only placeholder so a save during (or after a failed) sku/name
+  // lookup still submits the existing link instead of silently clearing it.
+  const [copyOf, setCopyOf] = useState<CopyOfPartSelection | null>(
+    part?.copyOfPartId ? { id: part.copyOfPartId, sku: `#${part.copyOfPartId}`, name: '' } : null,
+  );
   const [isActive, setIsActive] = useState(part?.isActive ?? true);
+
+  const linkedCopyOfPartId = part?.copyOfPartId;
+  useEffect(() => {
+    if (!linkedCopyOfPartId) {
+      return;
+    }
+    let isCancelled = false;
+    getPart360(linkedCopyOfPartId)
+      .then((originalPart) => {
+        if (isCancelled) {
+          return;
+        }
+        setCopyOf((current) =>
+          current?.id === originalPart.id
+            ? { id: originalPart.id, sku: originalPart.sku, name: originalPart.name }
+            : current,
+        );
+      })
+      .catch(() => {});
+    return () => {
+      isCancelled = true;
+    };
+  }, [linkedCopyOfPartId]);
 
   const categoryOptions = buildCategoryOptions(categories);
 
@@ -104,6 +154,8 @@ function PartForm({
       description: description.trim() === '' ? null : description.trim(),
       unitOfMeasure: unitOfMeasure.trim() === '' ? undefined : unitOfMeasure.trim(),
       mrp: mrp.trim() === '' ? null : Number(mrp),
+      gradeId: gradeId === '' ? null : gradeId,
+      copyOfPartId: copyOf?.id ?? null,
     };
     run(part ? { ...sharedFields, isActive } : sharedFields);
   }
@@ -158,7 +210,21 @@ function PartForm({
             </option>
           ))}
         </Select>
+        <Select
+          label="Grade"
+          value={gradeId}
+          onChange={(event) => setGradeId(event.target.value === '' ? '' : Number(event.target.value))}
+          error={fieldErrors.gradeId}
+        >
+          <option value="">Ungraded</option>
+          {partGrades.map((grade) => (
+            <option key={grade.id} value={grade.id}>
+              {grade.name}
+            </option>
+          ))}
+        </Select>
       </div>
+      <CopyOfPartPicker value={copyOf} onSelect={setCopyOf} />
       <Input
         label="Description"
         placeholder="Optional"

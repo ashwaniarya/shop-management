@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback } from 'react';
 
 import { PartActiveBadge } from '@/components/PartActiveBadge';
+import { PartGradeBadge } from '@/components/PartGradeBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { LoadingRow } from '@/components/ui/LoadingRow';
@@ -14,20 +15,22 @@ import { useFitmentSummaries } from '@/hooks/useFitmentSummaries';
 import { usePaginatedList } from '@/hooks/usePaginatedList';
 import { listParts } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
-import type { Category, Manufacturer } from '@shop/shared';
+import type { Category, Manufacturer, PartGrade } from '@shop/shared';
 
 import type { PartsFiltersValue } from './PartsFilterBar';
 
 const PAGE_SIZE = 20;
-const COLUMN_COUNT = 7;
+const COLUMN_COUNT = 8;
 
 interface PartsTableProps {
   filters: PartsFiltersValue;
   categoriesById: Map<number, Category>;
   manufacturersById: Map<number, Manufacturer>;
+  partGrades: PartGrade[];
+  partGradesById: Map<number, PartGrade>;
 }
 
-export function PartsTable({ filters, categoriesById, manufacturersById }: PartsTableProps) {
+export function PartsTable({ filters, categoriesById, manufacturersById, partGrades, partGradesById }: PartsTableProps) {
   const router = useRouter();
 
   const fetchPage = useCallback(
@@ -38,6 +41,7 @@ export function PartsTable({ filters, categoriesById, manufacturersById }: Parts
         q: filters.q || undefined,
         categoryId: filters.categoryId ?? undefined,
         manufacturerId: filters.manufacturerId ?? undefined,
+        gradeId: filters.gradeId ?? undefined,
         isActive: filters.activeFilter === 'all' ? undefined : filters.activeFilter === 'active',
         vehicleClassId: filters.vehicle.classId ?? undefined,
         vehicleMakeId: filters.vehicle.makeId ?? undefined,
@@ -62,6 +66,7 @@ export function PartsTable({ filters, categoriesById, manufacturersById }: Parts
             <Th>Name</Th>
             <Th>Manufacturer</Th>
             <Th>Category</Th>
+            <Th>Grade</Th>
             <Th align="right">MRP</Th>
             <Th>Fitment</Th>
             <Th>Status</Th>
@@ -80,35 +85,39 @@ export function PartsTable({ filters, categoriesById, manufacturersById }: Parts
               </td>
             </tr>
           ) : (
-            parts.map((part) => (
-              <Tr key={part.id} onClick={() => router.push(`/parts/${part.id}`)}>
-                <Td mono>
-                  <Link
-                    href={`/parts/${part.id}`}
-                    className="text-ink-100 hover:text-accent-400"
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    {part.sku}
-                  </Link>
-                </Td>
-                <Td>{part.name}</Td>
-                <Td>{manufacturersById.get(part.manufacturerId)?.name ?? `#${part.manufacturerId}`}</Td>
-                <Td>{categoriesById.get(part.categoryId)?.name ?? `#${part.categoryId}`}</Td>
-                <Td align="right" mono>
-                  {formatCurrency(part.mrp)}
-                </Td>
-                <Td className="text-ink-400">
-                  {loadingPartIds.has(part.id) ? (
-                    <span className="animate-skeleton inline-block h-3 w-20 rounded-[3px] bg-ink-800" />
-                  ) : (
-                    (summaryByPartId.get(part.id) ?? '—')
-                  )}
-                </Td>
-                <Td>
-                  <PartActiveBadge isActive={part.isActive} />
-                </Td>
-              </Tr>
-            ))
+            parts.map((part) => {
+              const grade = part.gradeId === null ? undefined : partGradesById.get(part.gradeId);
+              return (
+                <Tr key={part.id} onClick={() => router.push(`/parts/${part.id}`)}>
+                  <Td mono>
+                    <Link
+                      href={`/parts/${part.id}`}
+                      className="text-ink-100 hover:text-accent-400"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      {part.sku}
+                    </Link>
+                  </Td>
+                  <Td>{part.name}</Td>
+                  <Td>{manufacturersById.get(part.manufacturerId)?.name ?? `#${part.manufacturerId}`}</Td>
+                  <Td>{categoriesById.get(part.categoryId)?.name ?? `#${part.categoryId}`}</Td>
+                  <Td>{grade ? <PartGradeBadge grade={grade} partGrades={partGrades} /> : '—'}</Td>
+                  <Td align="right" mono>
+                    {formatCurrency(part.mrp)}
+                  </Td>
+                  <Td className="text-ink-400">
+                    {loadingPartIds.has(part.id) ? (
+                      <span className="animate-skeleton inline-block h-3 w-20 rounded-[3px] bg-ink-800" />
+                    ) : (
+                      (summaryByPartId.get(part.id) ?? '—')
+                    )}
+                  </Td>
+                  <Td>
+                    <PartActiveBadge isActive={part.isActive} />
+                  </Td>
+                </Tr>
+              );
+            })
           )}
         </tbody>
       </Table>

@@ -10,6 +10,7 @@ import { PartsTable } from '@/components/parts/PartsTable';
 import { Button } from '@/components/ui/Button';
 import { useCategoriesLookup } from '@/hooks/useCategoriesLookup';
 import { useManufacturersLookup } from '@/hooks/useManufacturersLookup';
+import { usePartGradesLookup } from '@/hooks/usePartGradesLookup';
 
 export default function PartsPage() {
   const router = useRouter();
@@ -17,6 +18,7 @@ export default function PartsPage() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const { categories, categoriesById } = useCategoriesLookup();
   const { manufacturers, manufacturersById } = useManufacturersLookup();
+  const { partGrades, partGradesById } = usePartGradesLookup();
 
   return (
     <div className="flex flex-col gap-6">
@@ -32,14 +34,27 @@ export default function PartsPage() {
 
       <PartSearchPanel />
 
-      <PartsFilterBar value={filters} onChange={setFilters} categories={categories} manufacturers={manufacturers} />
+      <PartsFilterBar
+        value={filters}
+        onChange={setFilters}
+        categories={categories}
+        manufacturers={manufacturers}
+        partGrades={partGrades}
+      />
 
-      <PartsTable filters={filters} categoriesById={categoriesById} manufacturersById={manufacturersById} />
+      <PartsTable
+        filters={filters}
+        categoriesById={categoriesById}
+        manufacturersById={manufacturersById}
+        partGrades={partGrades}
+        partGradesById={partGradesById}
+      />
 
       <PartFormDialog
         part={null}
         manufacturers={manufacturers}
         categories={categories}
+        partGrades={partGrades}
         isOpen={isCreateDialogOpen}
         onClose={() => setIsCreateDialogOpen(false)}
         onSaved={(createdPart) => router.push(`/parts/${createdPart.id}`)}

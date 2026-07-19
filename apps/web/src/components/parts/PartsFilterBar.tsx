@@ -7,7 +7,7 @@ import { VehicleCascadeSelect, type VehicleCascadeValue } from '@/components/ui/
 import { useDebouncedCommit } from '@/hooks/useDebouncedCommit';
 import { useVehicleCascadeData } from '@/hooks/useVehicleCascadeData';
 import { buildCategoryOptions } from '@/lib/categoryTree';
-import type { Category, Manufacturer } from '@shop/shared';
+import type { Category, Manufacturer, PartGrade } from '@shop/shared';
 
 export type ActiveFilter = 'all' | 'active' | 'inactive';
 
@@ -15,6 +15,7 @@ export interface PartsFiltersValue {
   q: string;
   categoryId: number | null;
   manufacturerId: number | null;
+  gradeId: number | null;
   vehicle: VehicleCascadeValue;
   activeFilter: ActiveFilter;
 }
@@ -23,6 +24,7 @@ export const INITIAL_PARTS_FILTERS: PartsFiltersValue = {
   q: '',
   categoryId: null,
   manufacturerId: null,
+  gradeId: null,
   vehicle: { classId: null, makeId: null, modelId: null },
   activeFilter: 'all',
 };
@@ -38,9 +40,10 @@ interface PartsFilterBarProps {
   onChange: (value: PartsFiltersValue) => void;
   categories: Category[];
   manufacturers: Manufacturer[];
+  partGrades: PartGrade[];
 }
 
-export function PartsFilterBar({ value, onChange, categories, manufacturers }: PartsFilterBarProps) {
+export function PartsFilterBar({ value, onChange, categories, manufacturers, partGrades }: PartsFilterBarProps) {
   const [qDraft, setQDraft] = useDebouncedCommit(value.q, (q) => onChange({ ...value, q }));
   const { vehicleClasses, vehicleMakes, vehicleModels } = useVehicleCascadeData();
   const categoryOptions = buildCategoryOptions(categories);
@@ -79,6 +82,20 @@ export function PartsFilterBar({ value, onChange, categories, manufacturers }: P
           {manufacturers.map((manufacturer) => (
             <option key={manufacturer.id} value={manufacturer.id}>
               {manufacturer.name}
+            </option>
+          ))}
+        </Select>
+        <Select
+          label="Grade"
+          value={value.gradeId ?? ''}
+          onChange={(event) =>
+            onChange({ ...value, gradeId: event.target.value === '' ? null : Number(event.target.value) })
+          }
+        >
+          <option value="">All grades</option>
+          {partGrades.map((grade) => (
+            <option key={grade.id} value={grade.id}>
+              {grade.name}
             </option>
           ))}
         </Select>
