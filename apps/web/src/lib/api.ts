@@ -14,6 +14,9 @@ import type {
   PartCrossReferenceCreate,
   PartFitment,
   PartFitmentCreate,
+  PartGrade,
+  PartGradeCreate,
+  PartGradeUpdate,
   PartUpdate,
   Shop,
   ShopCreate,
@@ -190,6 +193,17 @@ export type Part360 = Part & {
   inventory?: InventoryItemExpanded[];
 };
 
+export type PartFamilyMember = Part & {
+  gradeName: string | null;
+  quantityOnHand?: number | null;
+  sellingPrice?: number | null;
+};
+
+export type PartFamily = {
+  original: PartFamilyMember;
+  copies: PartFamilyMember[];
+};
+
 export interface TransactionSummary {
   sales: { count: number; quantity: number; revenue: number };
   purchases: { count: number; quantity: number; cost: number };
@@ -202,6 +216,7 @@ export interface ListPartsParams extends PaginationParams {
   q?: string;
   categoryId?: number;
   manufacturerId?: number;
+  gradeId?: number;
   isActive?: boolean;
   vehicleClassId?: number;
   vehicleMakeId?: number;
@@ -230,6 +245,10 @@ export function searchPartsByNumber(number: string, params?: PaginationParams): 
 
 export function getPart360(id: number, include?: PartIncludeValue[]): Promise<Part360> {
   return get<Part360>(`/parts/${id}`, include?.length ? { include: include.join(',') } : undefined);
+}
+
+export function getPartFamily(partId: number, shopId?: number): Promise<PartFamily> {
+  return get<PartFamily>(`/parts/${partId}/family`, { shopId });
 }
 
 export function listPartFitments(partId: number, params?: PaginationParams): Promise<Paginated<PartFitment>> {
@@ -323,6 +342,24 @@ export function updateCategory(id: number, body: CategoryUpdate): Promise<Catego
 // 409 if the category still has child categories or parts assigned to it.
 export function deleteCategory(id: number): Promise<void> {
   return del(`/categories/${id}`);
+}
+
+// --- Part Grades ---------------------------------------------------------------------
+
+export function listPartGrades(params?: PaginationParams): Promise<Paginated<PartGrade>> {
+  return list<PartGrade>('/part-grades', params);
+}
+
+export function createPartGrade(body: PartGradeCreate): Promise<PartGrade> {
+  return post<PartGrade>('/part-grades', body);
+}
+
+export function updatePartGrade(id: number, body: PartGradeUpdate): Promise<PartGrade> {
+  return patch<PartGrade>(`/part-grades/${id}`, body);
+}
+
+export function softDeletePartGrade(id: number): Promise<void> {
+  return del(`/part-grades/${id}`);
 }
 
 // --- Suppliers -----------------------------------------------------------------------
