@@ -11,7 +11,7 @@ import {
 import { Router } from 'express';
 import { z } from 'zod';
 
-import { requireCategory, requireManufacturer, requirePart, requirePartGrade } from '../lib/assertExists';
+import { requireCategory, requireManufacturer, requirePart, requirePartGrade, requireShop } from '../lib/assertExists';
 import { asyncHandler } from '../lib/asyncHandler';
 import { normalizeNumber } from '../lib/normalize';
 import { buildMeta, toSkipTake } from '../lib/pagination';
@@ -28,7 +28,7 @@ import {
 import { getQuery, validate, validateQuery } from '../middleware/validate';
 import { NotFoundError } from '../services/errors';
 import { buildFitmentWhere, validateFitmentInput } from '../services/fitment';
-import { validateCopyOfTarget } from '../services/partFamily';
+import { type FamilyMember, resolveFamily, validateCopyOfTarget } from '../services/partFamily';
 import { searchPartsByNumber } from '../services/partSearch';
 
 export const partsRouter = Router();
@@ -467,5 +467,42 @@ partsRouter.delete(
     await prisma.supplierPart.delete({ where: { id: supplierPartId } });
 
     res.status(204).end();
+  }),
+);
+
+// --- Part Family ------------------------------------------------------------------
+
+const partFamilyQuerySchema = z.object({
+  shopId: z.coerce.number().int().optional(),
+});
+
+partsRouter.get(
+  '/parts/:id/family',
+  validateQuery(partFamilyQuerySchema),
+  asyncHandler(async (req, res) => {
+    const partId = requireIdParam(req.params.id);
+    const part = await requirePart(partId);
+    const { shopId } = getQuery<z.infer<typeof partFamilyQuerySchema>>(res);
+    if (shopId !== undefined) {
+      await requireShop(shopId);
+    }
+
+    const family = await resolveFamily(part, shopId);
+
+    const serializeFamilyMember = (member: FamilyMember) => {
+      const stock = member.inventoryItem === null ? null : serializeInventoryItem(member.inventoryItem);
+      return {
+        ...serializePart(member.part),
+        gradeName: member.part.grade?.name ?? null,
+        ...(shopId !== undefined
+          ? { quantityOnHand: stock?.quantityOnHand ?? null, sellingPrice: stock?.sellingPrice ?? null }
+          : {}),
+      };
+    };
+
+    res.json({
+      original: serializeFamilyMember(family.original),
+      copies: family.copies.map(serializeFamilyMember),
+    });
   }),
 );

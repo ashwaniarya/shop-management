@@ -5,6 +5,7 @@ import { RefType } from '@prisma/client';
 import { listResponseSchema, partSchema } from '@shop/shared';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
 import { app } from '../app';
 import { normalizeNumber } from '../lib/normalize';
@@ -925,6 +926,148 @@ describe('parts router', () => {
       const response = await request(app)
         .patch(`/api/v1/parts/${supplierPartOwnerId}/suppliers/999999999`)
         .send({ isPreferred: true });
+
+      expect(response.status).toBe(404);
+    });
+  });
+
+  describe('GET /parts/:id/family', () => {
+    let familyShopId: number;
+    let familyOriginalId: number;
+    let earlyCopyId: number;
+    let lateCopyId: number;
+
+    const familyMemberSchema = partSchema.extend({ gradeName: z.string().nullable() });
+    const familyMemberWithStockSchema = familyMemberSchema.extend({
+      quantityOnHand: z.number().nullable(),
+      sellingPrice: z.number().nullable(),
+    });
+
+    beforeAll(async () => {
+      const earlyGrade = await prisma.partGrade.create({
+        data: { name: `Family Grade Early ${ts}`, displayOrder: 1 },
+      });
+      partGradeIds.push(earlyGrade.id);
+      const lateGrade = await prisma.partGrade.create({
+        data: { name: `Family Grade Late ${ts}`, displayOrder: 2 },
+      });
+      partGradeIds.push(lateGrade.id);
+
+      const original = await createPartFixture(prisma, {
+        sku: `FAMILY-ORIG-${ts}`,
+        manufacturerPartNumber: `FAMILY-ORIG-MPN-${ts}`,
+        manufacturerId,
+        categoryId,
+      });
+      familyOriginalId = original.id;
+      partIds.push(familyOriginalId);
+
+      // Late-grade copy created before the early-grade one, so id order and
+      // displayOrder order disagree and the ordering assertion has teeth
+      const lateCopy = await createPartFixture(prisma, {
+        sku: `FAMILY-LATE-${ts}`,
+        manufacturerPartNumber: `FAMILY-LATE-MPN-${ts}`,
+        manufacturerId,
+        categoryId,
+        gradeId: lateGrade.id,
+        copyOfPartId: familyOriginalId,
+      });
+      lateCopyId = lateCopy.id;
+      partIds.push(lateCopyId);
+
+      const earlyCopy = await createPartFixture(prisma, {
+        sku: `FAMILY-EARLY-${ts}`,
+        manufacturerPartNumber: `FAMILY-EARLY-MPN-${ts}`,
+        manufacturerId,
+        categoryId,
+        gradeId: earlyGrade.id,
+        copyOfPartId: familyOriginalId,
+      });
+      earlyCopyId = earlyCopy.id;
+      partIds.push(earlyCopyId);
+
+      const shop = await prisma.shop.create({ data: { name: `Family Shop ${ts}` } });
+      familyShopId = shop.id;
+      await prisma.inventoryItem.create({
+        data: { shopId: familyShopId, partId: familyOriginalId, quantityOnHand: 7, sellingPrice: 120.5 },
+      });
+      await prisma.inventoryItem.create({
+        data: { shopId: familyShopId, partId: earlyCopyId, quantityOnHand: 3, sellingPrice: 99.99 },
+      });
+    });
+
+    afterAll(async () => {
+      await prisma.inventoryItem.deleteMany({ where: { shopId: familyShopId } });
+      await prisma.shop.delete({ where: { id: familyShopId } });
+    });
+
+    it('returns the original first and copies ordered by grade displayOrder', async () => {
+      const response = await request(app).get(`/api/v1/parts/${familyOriginalId}/family`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.original.id).toBe(familyOriginalId);
+      expect(response.body.copies.map((member: { id: number }) => member.id)).toEqual([earlyCopyId, lateCopyId]);
+      for (const member of [response.body.original, ...response.body.copies]) {
+        familyMemberSchema.parse(member);
+      }
+      expect(response.body.original.gradeName).toBeNull();
+      expect(response.body.copies[0].gradeName).toBe(`Family Grade Early ${ts}`);
+      expect(response.body.copies[1].gradeName).toBe(`Family Grade Late ${ts}`);
+    });
+
+    it('carries per-shop stock on stocked members and explicit nulls on the unstocked copy when shopId is given', async () => {
+      const response = await request(app)
+        .get(`/api/v1/parts/${familyOriginalId}/family`)
+        .query({ shopId: familyShopId });
+
+      expect(response.status).toBe(200);
+      for (const member of [response.body.original, ...response.body.copies]) {
+        familyMemberWithStockSchema.parse(member);
+      }
+      expect(response.body.original.quantityOnHand).toBe(7);
+      expect(response.body.original.sellingPrice).toBe(120.5);
+
+      const stockedCopy = response.body.copies.find((member: { id: number }) => member.id === earlyCopyId);
+      expect(stockedCopy.quantityOnHand).toBe(3);
+      expect(stockedCopy.sellingPrice).toBe(99.99);
+
+      const unstockedCopy = response.body.copies.find((member: { id: number }) => member.id === lateCopyId);
+      expect(unstockedCopy.quantityOnHand).toBeNull();
+      expect(unstockedCopy.sellingPrice).toBeNull();
+    });
+
+    it('omits the stock keys entirely when shopId is not given', async () => {
+      const response = await request(app).get(`/api/v1/parts/${familyOriginalId}/family`);
+
+      expect(response.status).toBe(200);
+      for (const member of [response.body.original, ...response.body.copies]) {
+        expect('quantityOnHand' in member).toBe(false);
+        expect('sellingPrice' in member).toBe(false);
+      }
+    });
+
+    it('returns the identical family when called from a copy', async () => {
+      const fromOriginal = await request(app).get(`/api/v1/parts/${familyOriginalId}/family`);
+      const fromCopy = await request(app).get(`/api/v1/parts/${lateCopyId}/family`);
+
+      expect(fromCopy.status).toBe(200);
+      expect(fromCopy.body.original.id).toBe(fromOriginal.body.original.id);
+      expect(fromCopy.body.original.id).toBe(familyOriginalId);
+      expect(fromCopy.body.copies.map((member: { id: number }) => member.id)).toEqual(
+        fromOriginal.body.copies.map((member: { id: number }) => member.id),
+      );
+    });
+
+    it('returns 404 NOT_FOUND for an unknown part', async () => {
+      const response = await request(app).get('/api/v1/parts/999999999/family');
+
+      expect(response.status).toBe(404);
+    });
+
+    it('returns 404 NOT_FOUND for an unknown shopId', async () => {
+      const response = await request(app)
+        .get(`/api/v1/parts/${familyOriginalId}/family`)
+        .query({ shopId: 999999999 });
 
       expect(response.status).toBe(404);
     });

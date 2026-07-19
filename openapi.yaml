@@ -1153,6 +1153,39 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/parts/{id}/family:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      operationId: getPartFamily
+      summary: Get a part's copy family
+      tags: ["Parts"]
+      description: >-
+        Returns the part's copy family: the original first, then its copies
+        ordered by grade displayOrder (ungraded copies last). The same
+        family is returned whether the id names the original or any copy;
+        families are one level deep. Members are returned regardless of
+        isActive.
+      parameters:
+        - name: shopId
+          in: query
+          required: false
+          description: >-
+            When given, each member additionally carries quantityOnHand and
+            sellingPrice for that shop (null when the member is not stocked
+            there); omitted otherwise.
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: The part's family, original first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartFamilyResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/shops:
     get:
       operationId: listShops
@@ -2604,3 +2637,30 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/InventoryItemExpanded'
+
+    PartFamilyMember:
+      description: >-
+        A member of a part's copy family. `quantityOnHand` and
+        `sellingPrice` are present only when the request carried a
+        `shopId`.
+      allOf:
+        - $ref: '#/components/schemas/Part'
+        - type: object
+          required: [gradeName]
+          properties:
+            gradeName:
+              type: [string, "null"]
+            quantityOnHand:
+              type: [number, "null"]
+            sellingPrice:
+              type: [number, "null"]
+    PartFamilyResponse:
+      type: object
+      required: [original, copies]
+      properties:
+        original:
+          $ref: '#/components/schemas/PartFamilyMember'
+        copies:
+          type: array
+          items:
+            $ref: '#/components/schemas/PartFamilyMember'

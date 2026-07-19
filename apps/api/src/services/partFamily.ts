@@ -1,6 +1,8 @@
+import type { InventoryItem, Part, Prisma } from '@prisma/client';
+
 import { requirePart } from '../lib/assertExists';
 import { prisma } from '../lib/prisma';
-import { DomainValidationError } from './errors';
+import { DomainValidationError, NotFoundError } from './errors';
 
 // Non-transactional pre-checks, like the FK pre-checks in routes/parts.ts: a
 // concurrent PATCH can slip a new copy in between check and write. Accepted —
@@ -24,4 +26,57 @@ export async function validateCopyOfTarget(selfId: number | null, copyOfPartId: 
       throw new DomainValidationError(`Part ${selfId} has copies linked to it and cannot itself become a copy`);
     }
   }
+}
+
+type PartWithGrade = Prisma.PartGetPayload<{ include: { grade: true } }>;
+
+export interface FamilyMember {
+  part: PartWithGrade;
+  inventoryItem: InventoryItem | null;
+}
+
+export interface PartFamily {
+  original: FamilyMember;
+  copies: FamilyMember[];
+}
+
+export async function resolveFamily(part: Part, shopId?: number): Promise<PartFamily> {
+  const rootId = part.copyOfPartId ?? part.id;
+
+  const members = await prisma.part.findMany({
+    where: { OR: [{ id: rootId }, { copyOfPartId: rootId }] },
+    include: { grade: true },
+  });
+
+  const inventoryByPartId = new Map<number, InventoryItem>();
+  if (shopId !== undefined) {
+    const inventoryItems = await prisma.inventoryItem.findMany({
+      where: { shopId, partId: { in: members.map((member) => member.id) } },
+    });
+    for (const inventoryItem of inventoryItems) {
+      inventoryByPartId.set(inventoryItem.partId, inventoryItem);
+    }
+  }
+
+  const originalRow = members.find((member) => member.id === rootId);
+  if (!originalRow) {
+    throw new NotFoundError(`Part ${rootId} not found`);
+  }
+
+  // Sorted in JS rather than via Prisma orderBy: ordering on a nullable
+  // relation's column can't express "ungraded last" reliably
+  const copyRows = members
+    .filter((member) => member.id !== rootId)
+    .sort(
+      (left, right) =>
+        (left.grade?.displayOrder ?? Number.MAX_SAFE_INTEGER) -
+          (right.grade?.displayOrder ?? Number.MAX_SAFE_INTEGER) || left.id - right.id,
+    );
+
+  const toFamilyMember = (memberPart: PartWithGrade): FamilyMember => ({
+    part: memberPart,
+    inventoryItem: inventoryByPartId.get(memberPart.id) ?? null,
+  });
+
+  return { original: toFamilyMember(originalRow), copies: copyRows.map(toFamilyMember) };
 }
