@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
@@ -27,9 +28,17 @@ export default function PartsPage() {
           <h1 className="font-display text-2xl font-bold tracking-wide text-ink-50 uppercase">Parts catalog</h1>
           <p className="mt-1 text-sm text-ink-500">Search by number, or browse and filter the full catalog.</p>
         </div>
-        <Button variant="primary" onClick={() => setIsCreateDialogOpen(true)}>
+        <div className="hidden md:block">
+          <Button variant="primary" onClick={() => setIsCreateDialogOpen(true)}>
+            New part
+          </Button>
+        </div>
+        <Link
+          href="/parts/new"
+          className="inline-flex h-9 items-center gap-1.5 rounded-sm bg-accent-500 px-3.5 text-sm font-medium whitespace-nowrap text-ink-950 transition-colors hover:bg-accent-400 active:bg-accent-600 md:hidden"
+        >
           New part
-        </Button>
+        </Link>
       </div>
 
       <PartSearchPanel partGrades={partGrades} partGradesById={partGradesById} />

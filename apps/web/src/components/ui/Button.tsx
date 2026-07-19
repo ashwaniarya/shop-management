@@ -3,7 +3,7 @@ import type { ComponentProps, ReactNode } from 'react';
 import { Spinner } from './Spinner';
 
 type ButtonVariant = 'primary' | 'secondary' | 'outline-danger' | 'ghost';
-type ButtonSize = 'sm' | 'md';
+type ButtonSize = 'sm' | 'md' | 'lg';
 
 // ComponentProps<'button'> (not ButtonHTMLAttributes) so `ref` is accepted and
 // carried through the {...rest} spread onto the DOM button (React 19 ref-as-prop).
@@ -26,6 +26,7 @@ const VARIANT_CLASSES: Record<ButtonVariant, string> = {
 const SIZE_CLASSES: Record<ButtonSize, string> = {
   sm: 'h-7 px-2.5 text-xs gap-1.5',
   md: 'h-9 px-3.5 text-sm gap-2',
+  lg: 'h-12 px-5 text-base gap-2.5',
 };
 
 export function Button({

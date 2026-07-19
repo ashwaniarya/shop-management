@@ -1,24 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
-import { CopyOfPartPicker, type CopyOfPartSelection } from '@/components/parts/CopyOfPartPicker';
-import { reconcileCopyOfPrefill } from '@/components/parts/reconcileCopyOfPrefill';
-import { FormActions } from '@/components/ui/FormActions';
+import { buildPartFormPayload } from '@/components/parts/buildPartFormPayload';
+import { PartFormFields, usePartFormValues } from '@/components/parts/PartFormFields';
 import { Dialog } from '@/components/ui/Dialog';
-import { Input } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Select';
+import { FormActions } from '@/components/ui/FormActions';
 import { useZodSubmit } from '@/hooks/useZodSubmit';
-import { ApiError, createPart, getPart360, updatePart } from '@/lib/api';
-import { buildCategoryOptions } from '@/lib/categoryTree';
-import {
-  partCreateSchema,
-  partUpdateSchema,
-  type Category,
-  type Manufacturer,
-  type Part,
-  type PartGrade,
-} from '@shop/shared';
+import { ApiError, createPart, updatePart } from '@/lib/api';
+import { partCreateSchema, partUpdateSchema, type Category, type Manufacturer, type Part, type PartGrade } from '@shop/shared';
 
 interface PartFormDialogProps {
   part: Part | null;
@@ -83,44 +73,8 @@ function PartForm({
   onClose: () => void;
   onSaved: (part: Part) => void;
 }) {
-  const [sku, setSku] = useState(part?.sku ?? '');
-  const [name, setName] = useState(part?.name ?? '');
-  const [manufacturerId, setManufacturerId] = useState<number | ''>(part?.manufacturerId ?? '');
-  const [manufacturerPartNumber, setManufacturerPartNumber] = useState(part?.manufacturerPartNumber ?? '');
-  const [categoryId, setCategoryId] = useState<number | ''>(part?.categoryId ?? '');
-  const [description, setDescription] = useState(part?.description ?? '');
-  const [unitOfMeasure, setUnitOfMeasure] = useState(part?.unitOfMeasure ?? 'piece');
-  const [mrp, setMrp] = useState(part?.mrp?.toString() ?? '');
-  const [gradeId, setGradeId] = useState<number | ''>(part?.gradeId ?? '');
-  // Seeded with an id-only placeholder so a save during (or after a failed) sku/name
-  // lookup still submits the existing link instead of silently clearing it.
-  const [copyOf, setCopyOf] = useState<CopyOfPartSelection | null>(
-    part?.copyOfPartId ? { id: part.copyOfPartId, sku: `#${part.copyOfPartId}`, name: '' } : null,
-  );
+  const values = usePartFormValues(part);
   const [isActive, setIsActive] = useState(part?.isActive ?? true);
-
-  const linkedCopyOfPartId = part?.copyOfPartId;
-  useEffect(() => {
-    if (!linkedCopyOfPartId) {
-      return;
-    }
-    let isCancelled = false;
-    getPart360(linkedCopyOfPartId)
-      .then((originalPart) => {
-        if (isCancelled) {
-          return;
-        }
-        setCopyOf((current) =>
-          reconcileCopyOfPrefill(current, { id: originalPart.id, sku: originalPart.sku, name: originalPart.name }),
-        );
-      })
-      .catch(() => {});
-    return () => {
-      isCancelled = true;
-    };
-  }, [linkedCopyOfPartId]);
-
-  const categoryOptions = buildCategoryOptions(categories);
 
   const closeAfterSave = (savedPart: Part) => {
     onSaved(savedPart);
@@ -143,112 +97,19 @@ function PartForm({
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    const sharedFields = {
-      sku: sku.trim(),
-      name: name.trim(),
-      manufacturerId: manufacturerId === '' ? undefined : manufacturerId,
-      manufacturerPartNumber: manufacturerPartNumber.trim(),
-      categoryId: categoryId === '' ? undefined : categoryId,
-      description: description.trim() === '' ? null : description.trim(),
-      unitOfMeasure: unitOfMeasure.trim() === '' ? undefined : unitOfMeasure.trim(),
-      mrp: mrp.trim() === '' ? null : Number(mrp),
-      gradeId: gradeId === '' ? null : gradeId,
-      copyOfPartId: copyOf?.id ?? null,
-    };
+    const sharedFields = buildPartFormPayload(values);
     run(part ? { ...sharedFields, isActive } : sharedFields);
   }
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Input
-          label="SKU"
-          required
-          value={sku}
-          onChange={(event) => setSku(event.target.value)}
-          error={fieldErrors.sku}
-          className="font-mono"
-        />
-        <Input
-          label="Mfr. part number"
-          required
-          value={manufacturerPartNumber}
-          onChange={(event) => setManufacturerPartNumber(event.target.value)}
-          error={fieldErrors.manufacturerPartNumber}
-          className="font-mono"
-        />
-      </div>
-      <Input label="Name" required value={name} onChange={(event) => setName(event.target.value)} error={fieldErrors.name} />
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Select
-          label="Manufacturer"
-          required
-          value={manufacturerId}
-          onChange={(event) => setManufacturerId(event.target.value === '' ? '' : Number(event.target.value))}
-          error={fieldErrors.manufacturerId}
-        >
-          <option value="">Select a manufacturer…</option>
-          {manufacturers.map((manufacturer) => (
-            <option key={manufacturer.id} value={manufacturer.id}>
-              {manufacturer.name}
-            </option>
-          ))}
-        </Select>
-        <Select
-          label="Category"
-          required
-          value={categoryId}
-          onChange={(event) => setCategoryId(event.target.value === '' ? '' : Number(event.target.value))}
-          error={fieldErrors.categoryId}
-        >
-          <option value="">Select a category…</option>
-          {categoryOptions.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </Select>
-        <Select
-          label="Grade"
-          value={gradeId}
-          onChange={(event) => setGradeId(event.target.value === '' ? '' : Number(event.target.value))}
-          error={fieldErrors.gradeId}
-        >
-          <option value="">Ungraded</option>
-          {partGrades.map((grade) => (
-            <option key={grade.id} value={grade.id}>
-              {grade.name}
-            </option>
-          ))}
-        </Select>
-      </div>
-      <CopyOfPartPicker value={copyOf} onSelect={setCopyOf} />
-      <Input
-        label="Description"
-        placeholder="Optional"
-        value={description}
-        onChange={(event) => setDescription(event.target.value)}
-        error={fieldErrors.description}
+      <PartFormFields
+        values={values}
+        manufacturers={manufacturers}
+        categories={categories}
+        partGrades={partGrades}
+        fieldErrors={fieldErrors}
       />
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Input
-          label="Unit of measure"
-          value={unitOfMeasure}
-          onChange={(event) => setUnitOfMeasure(event.target.value)}
-          error={fieldErrors.unitOfMeasure}
-        />
-        <Input
-          label="MRP"
-          placeholder="Optional"
-          value={mrp}
-          onChange={(event) => setMrp(event.target.value)}
-          error={fieldErrors.mrp}
-          type="number"
-          step="any"
-          min={0}
-          className="font-mono tabular-nums"
-        />
-      </div>
       {part ? (
         <label className="inline-flex items-center gap-1.5 text-sm text-ink-200">
           <input
