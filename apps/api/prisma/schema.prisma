@@ -91,9 +91,9 @@ model Part {
   grade           PartGrade?           @relation(fields: [gradeId], references: [id], onDelete: Restrict)
   // NOTE: Copy families are flat (one level): a part with copyOfPartId set can
   // never itself be a link target, and a part that has copies can never gain a
-  // copyOfPartId. Enforced in services/partFamily.ts — a CHECK cannot see other
-  // rows and this repo has no triggers. Direct DB writes (e.g. seed) must
-  // respect this manually.
+  // copyOfPartId. Must be enforced at the service layer (services/partFamily.ts)
+  // — a CHECK cannot see other rows and this repo has no triggers; direct DB
+  // writes (e.g. seed) must respect it manually.
   copyOf          Part?                @relation("PartCopyLink", fields: [copyOfPartId], references: [id], onDelete: Restrict)
   copies          Part[]               @relation("PartCopyLink")
   fitments        PartFitment[]

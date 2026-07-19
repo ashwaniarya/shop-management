@@ -40,10 +40,6 @@ describe('parts router', () => {
     await prisma.supplierPart.deleteMany({ where: { partId: { in: partIds } } });
     await prisma.partCrossReference.deleteMany({ where: { partId: { in: partIds } } });
     await prisma.partFitment.deleteMany({ where: { partId: { in: partIds } } });
-    // Copies before originals: the self-FK is ON DELETE RESTRICT and Postgres
-    // checks it per-row even within a single statement, so one deleteMany over
-    // an original and its copies can fail depending on row order.
-    await prisma.part.deleteMany({ where: { id: { in: partIds }, copyOfPartId: { not: null } } });
     await prisma.part.deleteMany({ where: { id: { in: partIds } } });
     await prisma.manufacturer.deleteMany({ where: { id: { in: [manufacturerId, otherManufacturerId] } } });
     await prisma.category.deleteMany({ where: { id: { in: categoryIds } } });
