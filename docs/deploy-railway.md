@@ -44,6 +44,6 @@ open https://<web-domain>                 # dashboard against live API
 ```
 
 Notes:
-- `prisma migrate deploy` runs on every api boot (start command) — applies the 2 migrations (init incl. partial unique indexes; fitment CHECK constraint).
+- `prisma migrate deploy` runs on every api boot (start command) — applies all migrations (currently 3: init incl. partial unique indexes; fitment CHECK constraint; part grades + copy links incl. the `part_copy_of_not_self` CHECK).
 - The api reads `openapi.yaml` from the repo root at boot — both services deploy the whole repo, so the file is present.
 - Keep both services on whole-repo deploys (no root-directory setting needed; the NIXPACKS_* commands scope the work).
