@@ -39,7 +39,7 @@ flowchart LR
 
 Every entity in this model lives in one of two scopes.
 
-**Catalog scope** is shared across all shops: Manufacturer, Category (a self-referential tree), Part, PartCrossReference, VehicleClass, VehicleMake, VehicleModel, PartFitment, Supplier, and SupplierPart. There is one copy of this data no matter how many shops use the system.
+**Catalog scope** is shared across all shops: Manufacturer, Category (a self-referential tree), PartGrade, Part, PartCrossReference, VehicleClass, VehicleMake, VehicleModel, PartFitment, Supplier, and SupplierPart. There is one copy of this data no matter how many shops use the system.
 
 **Shop scope** covers Shop itself, plus everything whose rows reference it: User, InventoryItem, and StockTransaction.
 
@@ -49,6 +49,7 @@ flowchart TB
     direction LR
     Manufacturer --> Part
     Category --> Part
+    PartGrade --> Part
     Part --> PartCrossReference["PartCrossReference<br/>(OEM / competitor numbers)"]
     Part --> PartFitment
     Supplier --> SupplierPart --> Part
@@ -86,6 +87,12 @@ erDiagram
         string name
         int parent_category_id FK "nullable, self-ref tree"
     }
+    PART_GRADE {
+        int id PK
+        string name "unique — Original, 1st Copy, 2nd Copy"
+        int display_order "rank — lower is closer to original"
+        bool is_active "soft retire — user-addable table"
+    }
     PART {
         int id PK
         string sku "internal number, unique"
@@ -93,6 +100,8 @@ erDiagram
         string manufacturer_part_number "unique per manufacturer"
         string name
         int category_id FK
+        int grade_id FK "nullable — quality tier"
+        int copy_of_part_id FK "nullable, self-ref — its original"
         string unit_of_measure "default piece"
         decimal mrp "nullable — printed on box"
         bool is_active
@@ -178,6 +187,8 @@ erDiagram
     MANUFACTURER ||--o{ PART : "makes"
     CATEGORY ||--o{ CATEGORY : "parent of"
     CATEGORY ||--o{ PART : "groups"
+    PART_GRADE |o--o{ PART : "tiers (optional)"
+    PART |o--o{ PART : "copied as (optional)"
     PART ||--o{ PART_CROSS_REFERENCE : "known by"
     PART ||--o{ PART_FITMENT : "has applications"
     VEHICLE_CLASS ||--o{ VEHICLE_MODEL : "classifies"
@@ -222,6 +233,20 @@ Relationships:
 - One Category is the parent of many child Categories (self-referential tree).
 - One Category groups many Parts.
 
+#### PartGrade
+
+Purpose: a quality tier a part is sold as — Original, 1st Copy, 2nd Copy. See section 7 for the full design.
+
+Key attributes:
+- `name` — unique
+- `display_order` — rank; lower is closer to the original
+- `is_active` — soft retire
+
+Notes: like VehicleClass, PartGrade is a plain, user-addable table, not an enum — the grade vocabulary varies by trade and grows in the field. Deleting a grade only sets `is_active` false: it disappears from pickers, but parts already tagged with it keep the tag, and the RESTRICT foreign key from Part blocks a hard delete while any part still references it.
+
+Relationships:
+- One PartGrade optionally tiers many Parts.
+
 #### Part
 
 Purpose: the catalog record for a part — what it IS, independent of any shop's stock.
@@ -232,15 +257,19 @@ Key attributes:
 - `manufacturer_part_number` — unique per manufacturer
 - `name`
 - `category_id`
+- `grade_id` — nullable
+- `copy_of_part_id` — nullable, self-referential
 - `unit_of_measure` — default piece
 - `mrp` — nullable
 - `is_active`
 
-Notes: Part is catalog-only — it carries no quantity. `mrp` lives on Part rather than on a per-shop record because it's printed on the box and is the same everywhere. The pair `(manufacturer_id, manufacturer_part_number)` is unique.
+Notes: Part is catalog-only — it carries no quantity. `mrp` lives on Part rather than on a per-shop record because it's printed on the box and is the same everywhere. The pair `(manufacturer_id, manufacturer_part_number)` is unique. `grade_id` tags the part's quality tier and `copy_of_part_id` links a copy to its original — both nullable, both independent of each other; see section 7.
 
 Relationships:
 - One Manufacturer makes many Parts.
 - One Category groups many Parts.
+- One PartGrade optionally tiers many Parts.
+- One Part (an original) is copied as many Parts (self-referential, one level deep).
 - One Part is known by many PartCrossReference rows.
 - One Part has many PartFitment rows (applications).
 - One Part is sourced via many SupplierPart rows.
@@ -381,7 +410,7 @@ Purpose: the per-shop stock record for a part — quantity, reorder level, prici
 Key attributes:
 - `shop_id`
 - `part_id` — unique per (shop, part)
-- `quantity_on_hand` — cache, maintained by the ledger (see section 7)
+- `quantity_on_hand` — cache, maintained by the ledger (see section 8)
 - `reorder_level`
 - `cost_price` — per shop
 - `selling_price` — per shop
@@ -395,7 +424,7 @@ Relationships:
 
 #### StockTransaction
 
-Purpose: one immutable ledger row recording a single stock movement — a sale, a purchase, or a manual adjustment. See section 7 for the full design.
+Purpose: one immutable ledger row recording a single stock movement — a sale, a purchase, or a manual adjustment. See section 8 for the full design.
 
 Key attributes:
 - `shop_id`
@@ -473,7 +502,71 @@ sequenceDiagram
   S-->>U: part found via PartCrossReference
 ```
 
-## 7. The stock ledger — sold vs remaining
+## 7. Grades and copies: the flat family (core design decision)
+
+Fitment (section 6) classifies a part by what it fits. The trade has a second classification axis: what quality tier it is. The same starter motor for the same tractor sits on the counter in three boxes — the original brand, a "1st copy" (a reputable clone at two-thirds the price), and a "2nd copy" (a budget clone at half) — and the customer's next question after "does it fit?" is "original or copy?". Cross-references don't cover this: a PartCrossReference row is an alternate **number** for the same product, while a copy is a **different product** doing the same job. The model adds three pieces:
+
+**Each tier is its own Part.** A 1st copy is not a variant flag on the original's row. It is a physically different product from a different manufacturer, with its own part number, its own MRP, its own suppliers, per-shop stock, and ledger history — so it gets a full Part row and everything that comes with one.
+
+**PartGrade names the tier.** A user-addable lookup — the VehicleClass pattern, not an enum: `name` (unique), `display_order` (rank; lower is closer to the original), `is_active`. Seeded with Original (1), 1st Copy (2), 2nd Copy (3), but the vocabulary varies by trade and grows in the field. Deleting a grade only deactivates it: it leaves the pickers while parts already tagged keep their tag, and the RESTRICT foreign key blocks a hard delete while any part still references it.
+
+**`copy_of_part_id` links the family.** Every copy points directly at its original — one nullable self-referential foreign key on Part, and deliberately nothing more.
+
+The two fields are independent, and both nullable by design. A part can carry a grade with no family link (the seeded Exide battery is an Original with no copies), and **ungraded is legal**: for consumables and general hardware the tier question never comes up at the counter, so forcing a grade there would be noise. As with zero fitment rows meaning "universal part", the null is the signal — 7 of the 12 seeded parts carry no grade.
+
+**Families are deliberately flat — one level.** A family is one original plus its direct copies, so three shapes can never exist: a self-link, a chain (linking to a part that is itself a copy), and a merge (a part that has copies becoming a copy itself). Rejections do the operator's thinking — "Part 12 is itself a copy; link to its original (part 9) instead" — so the fix is one click, not a support question. Nothing, however, restricts a copy to its original's manufacturer or category: cross-brand is the whole point of the link (Bosch original, Lucas TVS copy), and classification drift within a family is trade reality, not an error.
+
+Enforcement is layered, each layer guarding exactly what it can see:
+
+| Layer | Guards | Why |
+|---|---|---|
+| Service — `validateCopyOfTarget`, run on part create and update | the full invariant: self-links, chains, merges | the only layer that can read other rows; rejects with a 400 and a message naming the right target |
+| DB CHECK — `part_copy_of_not_self` | self-links only | a CHECK sees one row at a time, and this schema has no triggers |
+| Seed guard | the one-level rule across seed specs | the seed writes directly to the database, bypassing the service |
+
+The service checks are pre-checks, not transactional locks — a concurrent write can slip between check and insert. Accepted: the CHECK still backstops self-links, and family reads resolve one hop, so a freak chain degrades to a partial family rather than an error.
+
+Worked example — the seeded 575 DI starter family: three brands across three tiers, stocked differently per shop.
+
+```mermaid
+flowchart BT
+  C1["STM-LTV-575DI-C1<br/>Lucas TVS · 1st Copy"] -->|"copy_of_part_id"| ORIG["🔧 STM-BSH-575DI<br/>Bosch · Original"]
+  C2["STM-MCO-575DI-C2<br/>MICO · 2nd Copy"] -->|"copy_of_part_id"| ORIG
+```
+
+| SKU | Manufacturer | Grade | Main shop (qty @ price) | Highway shop (qty @ price) |
+|---|---|---|---|---|
+| STM-BSH-575DI | Bosch | Original | 6 @ 3,850 | 4 @ 3,900 |
+| STM-LTV-575DI-C1 | Lucas TVS | 1st Copy | 8 @ 2,600 | 5 @ 2,650 |
+| STM-MCO-575DI-C2 | MICO | 2nd Copy | 12 @ 1,950 | — not stocked |
+
+One endpoint answers "what tiers do we have of this?" from any member — the service roots the family at `copy_of_part_id ?? id` first, so the original and every copy return the identical result. Copies come back ordered by grade `display_order` (ungraded copies last), every member carries its `gradeName`, and the response is unpaginated by design: a flat family is a handful of rows by construction. (Part lists filter by tier too — `GET /parts?gradeId=`.)
+
+```
+GET /api/v1/parts/{id}/family              — id of ANY member, original or copy
+{
+  "original": { …part fields, "gradeName": "Original" },
+  "copies":  [ { …, "gradeName": "1st Copy" },
+               { …, "gradeName": "2nd Copy" } ]
+}
+
+GET /api/v1/parts/{id}/family?shopId=2     — same family, seen through one shop
+{
+  "original": { …, "gradeName": "Original", "quantityOnHand": 4, "sellingPrice": 3900 },
+  "copies":  [ { …, "gradeName": "1st Copy", "quantityOnHand": 5, "sellingPrice": 2650 },
+               { …, "gradeName": "2nd Copy", "quantityOnHand": null, "sellingPrice": null } ]
+}
+```
+
+With `shopId`, every member gains `quantityOnHand` and `sellingPrice` for that shop — `null` meaning "in catalog, not stocked there", the same absence-is-signal convention InventoryItem uses. Without `shopId` the two keys are absent entirely, so the catalog view and a shop's view can't be confused. Unknown part or shop ids are 404s, not empty families.
+
+Two alternatives were considered and rejected:
+
+**A grade enum on Part** — rejected for the same reason VehicleClass is a table: the vocabulary differs between trades ("OES", "premium copy") and grows in the field, and adding a value must not require a code change.
+
+**Copy as a PartCrossReference row** — rejected: a cross-reference is an alternate number for the *same* physical product; a copy is a *different* physical product that needs its own stock, prices, suppliers, and history, which only a full Part row provides. Multi-level trees were never a contender — the counter question is "what tiers of this part?", answered in one hop by a flat family. Supersession (one maker replacing its own part over time) is a genuinely chain-shaped relationship and deliberately stays out of this link; see section 11.
+
+## 8. The stock ledger — sold vs remaining
 
 StockTransaction is an append-only ledger: every SALE / PURCHASE / ADJUSTMENT is one immutable row — a quantity (`+in` / `−out`), the price at the time, and who recorded it. Rows are never edited or deleted; a correction is a new row.
 
@@ -503,7 +596,7 @@ flowchart LR
   QOH --> REMAIN["'What is remaining?'"]
 ```
 
-## 8. The item-360° view
+## 9. The item-360° view
 
 One part-centric lookup answers "tell me everything about this item":
 
@@ -512,15 +605,16 @@ flowchart LR
   P["🔧 Part<br/>Starter Motor X"]
   P --> ID["🔢 Identity<br/>sku · mfr number · cross-refs"]
   P --> CAT["🗂️ Category + Manufacturer"]
+  P --> GRD["🏷️ Grade & copy family<br/>(PartGrade · copy_of link)"]
   P --> FIT["🚜 Fits which vehicles<br/>(PartFitment rows)"]
   P --> SUP["🚚 Who supplies it<br/>(SupplierPart)"]
   P --> STK["🏪 Per-shop stock & price<br/>(InventoryItem)"]
   P --> HIS["📈 Movement history<br/>(StockTransaction)"]
 ```
 
-Identity resolves through `sku`, `manufacturer_part_number`, and PartCrossReference. Category and Manufacturer classify it. PartFitment says which vehicles it fits. SupplierPart says who can supply more of it. InventoryItem says what this shop has of it and at what price. StockTransaction shows its movement history.
+Identity resolves through `sku`, `manufacturer_part_number`, and PartCrossReference. Category and Manufacturer classify it. PartGrade and the copy-family link say which quality tier it is and which alternatives exist across tiers. PartFitment says which vehicles it fits. SupplierPart says who can supply more of it. InventoryItem says what this shop has of it and at what price. StockTransaction shows its movement history.
 
-## 9. Glossary
+## 10. Glossary
 
 **Part vs InventoryItem** — Part is the catalog record: what the part is, shared across every shop. InventoryItem is the per-shop stock record: how many this shop has, and at what price. A Part can exist with zero InventoryItem rows.
 
@@ -530,23 +624,28 @@ Identity resolves through `sku`, `manufacturer_part_number`, and PartCrossRefere
 
 **Cross-reference / interchange** — An alternate number for the same physical part — an OEM number, a competitor's number — stored in PartCrossReference so the part is findable regardless of which number someone has.
 
+**Grade** — A quality tier a part is sold as — Original, 1st Copy, 2nd Copy — stored in the user-addable PartGrade table and tagged onto a Part via `grade_id`. Ungraded is legal; many parts never get the tier question.
+
+**Copy family** — One original Part plus every Part linking to it via `copy_of_part_id`. Always one level deep: a copy points straight at its original, never at another copy.
+
 **Ledger** — The append-only StockTransaction table. Every stock movement is a new row; nothing is edited or deleted after the fact.
 
 **Specificity ladder** — The class → make → model narrowing pattern used by PartFitment: class is required, make and model are optional, and each one narrows the previous level.
 
 **Catalog scope vs shop scope** — Catalog-scope data (Part, Manufacturer, PartFitment, and others) is shared across every shop. Shop-scope data (InventoryItem, StockTransaction, User) belongs to one shop.
 
-## 10. Deliberately deferred (YAGNI)
+## 11. Deliberately deferred (YAGNI)
 
 The following are out of scope for the current model. Each has an intended landing spot, so adding it later is an extension, not a redesign.
 
 - **Full POS/invoicing** (Customer, Invoice with line items, GST invoice numbering) — a SALE row in StockTransaction already records the stock movement; an Invoice entity would group a customer's SALE rows together and add the numbering and tax fields a real invoice needs.
 - **Purchasing documents** (Purchase Order, Goods Receipt Note) — PURCHASE rows in StockTransaction already record the movement; PO/GRN entities would wrap that movement with an approval and receiving workflow.
 - **Pricing tiers** (e.g. retail vs. wholesale vs. mechanic pricing) — would extend InventoryItem with multiple price columns, or a separate PriceTier table keyed by shop and customer segment.
+- **Grade-aware pricing rules** (e.g. a default margin per grade, or "price the 1st copy at 70% of the original") — pricing already lives per shop on InventoryItem; a rule would be a suggestion layer on top, not a schema change.
 - **Barcodes** — would add a barcode column to Part, or a separate table if a part needs more than one barcode.
 - **Year/variant/engine fitment depth** — would extend PartFitment with further nullable narrowing columns (`year_from`, `year_to`, `engine_code`), following the same ladder pattern already used for class/make/model.
 - **Brand-vs-Manufacturer split** — would split today's single Manufacturer entity into Brand (marketing name) and Manufacturer (actual maker), with Part referencing Brand instead.
 - **Cross-shop users** (UserShopRole) — would lift today's shop-scoped User into a shared User plus a UserShopRole join table, as outlined in section 3.
 - **Multi-category parts** — would replace `Part.category_id` with a PartCategory join table, letting one part belong to more than one category.
-- **Supersession chains** (this part replaced that part, which replaced an earlier one) — PartCrossReference already has a SUPERSEDES `ref_type` for a single link; a full chain would need its own self-referential structure on Part.
+- **Supersession chains** (this part replaced that part, which replaced an earlier one) — PartCrossReference already has a SUPERSEDES `ref_type` for a single link; a full chain would need its own self-referential structure on Part, separate from `copy_of_part_id` — supersession is one maker's replacement timeline, not a quality tier, and unlike copy families it is chain-shaped by nature.
 - **Audit trail** (who changed what, when, across all entities) — would need a generic AuditLog entity capturing before/after state, separate from StockTransaction, which only tracks stock movements.

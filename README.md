@@ -2,7 +2,7 @@
 
 Multi-shop management system; first use case: vehicle spare-parts shop.
 
-- [Domain model](docs/domain-model.md) — entities, ERD, fitment design, stock ledger
+- [Domain model](docs/domain-model.md) — entities, ERD, fitment design, grades & copy families, stock ledger
 - [API contract](openapi.yaml) — OpenAPI 3.1, served as Swagger UI at `/docs`
 - `apps/api` — Express + TypeScript + Prisma (PostgreSQL)
 - `apps/web` — Next.js + TypeScript + Tailwind
