@@ -5,6 +5,7 @@ import { useCallback, useMemo } from 'react';
 import type { PartGrade } from '@shop/shared';
 
 import { listPartGrades } from '@/lib/api';
+import { sortPartGrades } from '@/lib/partGradeTone';
 
 import { useAsync } from './useAsync';
 
@@ -18,14 +19,8 @@ interface UsePartGradesLookupResult {
 const NO_PART_GRADES: PartGrade[] = [];
 
 export function usePartGradesLookup(): UsePartGradesLookupResult {
-  // Sorted by (displayOrder, name) because partGradeTone maps rank in this list to a tone.
-  const fetcher = useCallback(
-    () =>
-      listPartGrades({ limit: 100 }).then((page) =>
-        [...page.data].sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name)),
-      ),
-    [],
-  );
+  // Sorted because partGradeTone maps rank in this list to a tone.
+  const fetcher = useCallback(() => listPartGrades({ limit: 100 }).then((page) => sortPartGrades(page.data)), []);
   const { data, isLoading, error } = useAsync(fetcher);
   const partGrades = data ?? NO_PART_GRADES;
   const partGradesById = useMemo(

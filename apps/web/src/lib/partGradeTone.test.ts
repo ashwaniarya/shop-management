@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { PartGrade } from '@shop/shared';
 
-import { partGradeTone } from './partGradeTone';
+import { partGradeTone, sortPartGrades } from './partGradeTone';
 
 function buildGrade(overrides: Partial<PartGrade> & Pick<PartGrade, 'id'>): PartGrade {
   return {
@@ -47,5 +47,32 @@ describe('partGradeTone', () => {
     expect(partGradeTone(1, grades)).toBe('positive');
     expect(partGradeTone(2, grades)).toBe('accent');
     expect(partGradeTone(3, grades)).toBe('neutral');
+  });
+
+  it('returns muted for an inactive grade even at the head of the sorted list', () => {
+    const grades = [buildGrade({ id: 1, isActive: false }), buildGrade({ id: 2 })];
+    expect(partGradeTone(1, grades)).toBe('muted');
+  });
+
+  it('ranks active grades skipping over inactive entries', () => {
+    const grades = [
+      buildGrade({ id: 1, isActive: false }),
+      buildGrade({ id: 2 }),
+      buildGrade({ id: 3 }),
+    ];
+    expect(partGradeTone(2, grades)).toBe('positive');
+    expect(partGradeTone(3, grades)).toBe('accent');
+  });
+});
+
+describe('sortPartGrades', () => {
+  it('sorts by displayOrder and breaks ties by name without mutating the input', () => {
+    const grades = [
+      buildGrade({ id: 1, name: 'Standard', displayOrder: 1 }),
+      buildGrade({ id: 2, name: 'Economy', displayOrder: 1 }),
+      buildGrade({ id: 3, name: 'Premium', displayOrder: 0 }),
+    ];
+    expect(sortPartGrades(grades).map((grade) => grade.name)).toEqual(['Premium', 'Economy', 'Standard']);
+    expect(grades.map((grade) => grade.name)).toEqual(['Standard', 'Economy', 'Premium']);
   });
 });
