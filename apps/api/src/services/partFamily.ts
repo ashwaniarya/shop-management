@@ -48,6 +48,11 @@ export async function resolveFamily(part: Part, shopId?: number): Promise<PartFa
     include: { grade: true },
   });
 
+  const originalRow = members.find((member) => member.id === rootId);
+  if (!originalRow) {
+    throw new NotFoundError(`Part ${rootId} not found`);
+  }
+
   const inventoryByPartId = new Map<number, InventoryItem>();
   if (shopId !== undefined) {
     const inventoryItems = await prisma.inventoryItem.findMany({
@@ -56,11 +61,6 @@ export async function resolveFamily(part: Part, shopId?: number): Promise<PartFa
     for (const inventoryItem of inventoryItems) {
       inventoryByPartId.set(inventoryItem.partId, inventoryItem);
     }
-  }
-
-  const originalRow = members.find((member) => member.id === rootId);
-  if (!originalRow) {
-    throw new NotFoundError(`Part ${rootId} not found`);
   }
 
   // Sorted in JS rather than via Prisma orderBy: ordering on a nullable
