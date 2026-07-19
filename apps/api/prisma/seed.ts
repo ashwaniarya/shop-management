@@ -432,6 +432,7 @@ async function main() {
         },
       ];
 
+      const copySkus = new Set(partSpecs.filter((spec) => spec.copyOfSku !== undefined).map((spec) => spec.sku));
       const partIdBySku: Record<string, number> = {};
 
       for (const spec of partSpecs) {
@@ -440,6 +441,11 @@ async function main() {
           copyOfPartId = partIdBySku[spec.copyOfSku];
           if (copyOfPartId === undefined) {
             throw new Error(`partSpec ${spec.sku} references unknown copyOfSku ${spec.copyOfSku}`);
+          }
+          if (copySkus.has(spec.copyOfSku)) {
+            throw new Error(
+              `partSpec ${spec.sku} links copyOfSku ${spec.copyOfSku}, which is itself a copy — families are one level deep`,
+            );
           }
         }
 
