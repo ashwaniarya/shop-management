@@ -48,11 +48,13 @@ describe('part grades router', () => {
   it('returns 400 VALIDATION_ERROR when name is missing', async () => {
     const response = await request(app).post('/api/v1/part-grades').send({});
     expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('VALIDATION_ERROR');
   });
 
   it('returns 404 NOT_FOUND for a nonexistent part grade', async () => {
     const response = await request(app).get('/api/v1/part-grades/999999999');
     expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe('NOT_FOUND');
   });
 
   it('returns 409 CONFLICT on duplicate name', async () => {
@@ -65,6 +67,9 @@ describe('part grades router', () => {
     const duplicateResponse = await request(app)
       .post('/api/v1/part-grades')
       .send({ name: `Duplicate Grade ${ts}` });
+    if (duplicateResponse.status === 201) {
+      partGradeIds.push(duplicateResponse.body.id);
+    }
     expect(duplicateResponse.status).toBe(409);
     expect(duplicateResponse.body.error.code).toBe('CONFLICT');
   });

@@ -704,6 +704,8 @@ paths:
           $ref: '#/components/responses/ValidationError'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
     delete:
       operationId: deletePartGrade
       summary: Soft-delete a part grade
