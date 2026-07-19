@@ -10,6 +10,7 @@ import { requireIdParam } from '../lib/params';
 import { prisma } from '../lib/prisma';
 import { booleanQueryParam } from '../lib/queryBoolean';
 import { serializeInventoryItem } from '../lib/serialize';
+import { requireRole, requireSameShop } from '../middleware/authorize';
 import { getQuery, validate, validateQuery } from '../middleware/validate';
 import { NotFoundError } from '../services/errors';
 
@@ -37,6 +38,7 @@ const listInventoryQuerySchema = paginationQuerySchema.extend({
 
 inventoryRouter.get(
   '/shops/:shopId/inventory',
+  requireSameShop(),
   validateQuery(listInventoryQuerySchema),
   asyncHandler(async (req, res) => {
     const shopId = requireIdParam(req.params.shopId, 'shopId');
@@ -87,6 +89,7 @@ inventoryRouter.get(
 
 inventoryRouter.get(
   '/shops/:shopId/inventory/:partId',
+  requireSameShop(),
   asyncHandler(async (req, res) => {
     const shopId = requireIdParam(req.params.shopId, 'shopId');
     const partId = requireIdParam(req.params.partId, 'partId');
@@ -103,6 +106,8 @@ inventoryRouter.get(
 
 inventoryRouter.put(
   '/shops/:shopId/inventory/:partId',
+  requireRole('OWNER', 'MANAGER'),
+  requireSameShop(),
   validate(inventoryItemUpdateSchema),
   asyncHandler(async (req, res) => {
     const shopId = requireIdParam(req.params.shopId, 'shopId');

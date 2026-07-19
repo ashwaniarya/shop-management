@@ -1,7 +1,7 @@
 // Behavioural test: exercises the parts router (CRUD, search, 360 view, and the
 // fitments/cross-references/suppliers sub-resources) end-to-end via supertest
 // against the real DB
-import { RefType } from '@prisma/client';
+import { RefType, UserRole } from '@prisma/client';
 import { listResponseSchema, partSchema } from '@shop/shared';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -10,7 +10,18 @@ import { z } from 'zod';
 import { app } from '../app';
 import { normalizeNumber } from '../lib/normalize';
 import { prisma } from '../lib/prisma';
-import { createCatalogFixture, createPartFixture } from '../services/test-fixtures';
+import { createCatalogFixture, createPartFixture, createUserWithCredentials, tokenFor } from '../services/test-fixtures';
+
+// Every /api/v1/* request needs a Bearer token now; authApi wraps supertest with
+// the header. The owning user is an OWNER so parts mutations stay allowed.
+let token = '';
+const authApi = {
+  get: (url: string) => request(app).get(url).set('Authorization', `Bearer ${token}`),
+  post: (url: string) => request(app).post(url).set('Authorization', `Bearer ${token}`),
+  patch: (url: string) => request(app).patch(url).set('Authorization', `Bearer ${token}`),
+  put: (url: string) => request(app).put(url).set('Authorization', `Bearer ${token}`),
+  delete: (url: string) => request(app).delete(url).set('Authorization', `Bearer ${token}`),
+};
 
 describe('parts router', () => {
   const ts = Date.now();
@@ -19,11 +30,24 @@ describe('parts router', () => {
   let otherManufacturerId: number;
   let categoryId: number;
   let partGradeId: number;
+  let authShopId: number;
+  let authUserId: number;
   const categoryIds: number[] = [];
   const partIds: number[] = [];
   const partGradeIds: number[] = [];
 
   beforeAll(async () => {
+    const shop = await prisma.shop.create({ data: { name: `Parts Test Shop ${ts}` } });
+    authShopId = shop.id;
+    const owner = await createUserWithCredentials({
+      shopId: authShopId,
+      role: UserRole.OWNER,
+      username: `parts-owner-${ts}`,
+      pin: '1234',
+    });
+    authUserId = owner.id;
+    token = tokenFor(owner);
+
     const catalog = await createCatalogFixture(prisma, `Parts Test ${ts}`);
     manufacturerId = catalog.manufacturerId;
     categoryId = catalog.categoryId;
@@ -51,11 +75,13 @@ describe('parts router', () => {
     await prisma.partGrade.deleteMany({ where: { id: { in: partGradeIds } } });
     await prisma.manufacturer.deleteMany({ where: { id: { in: [manufacturerId, otherManufacturerId] } } });
     await prisma.category.deleteMany({ where: { id: { in: categoryIds } } });
+    await prisma.user.delete({ where: { id: authUserId } });
+    await prisma.shop.delete({ where: { id: authShopId } });
   });
 
   describe('CRUD', () => {
     it('runs a full create/read/update/delete cycle, asserting the Location header and envelope shape', async () => {
-      const createResponse = await request(app).post('/api/v1/parts').send({
+      const createResponse = await authApi.post('/api/v1/parts').send({
         sku: `SKU-CRUD-${ts}`,
         manufacturerId,
         manufacturerPartNumber: `MPN-CRUD-${ts}`,
@@ -71,22 +97,22 @@ describe('parts router', () => {
       expect(created.unitOfMeasure).toBe('piece');
       expect(created.mrp).toBe(199.5);
 
-      const getResponse = await request(app).get(`/api/v1/parts/${created.id}`);
+      const getResponse = await authApi.get(`/api/v1/parts/${created.id}`);
       expect(getResponse.status).toBe(200);
       expect(partSchema.parse(getResponse.body)).toEqual(created);
 
-      const listResponse = await request(app).get('/api/v1/parts').query({ limit: 100 });
+      const listResponse = await authApi.get('/api/v1/parts').query({ limit: 100 });
       const envelope = listResponseSchema(partSchema).parse(listResponse.body);
       expect(envelope.data.some((part) => part.id === created.id)).toBe(true);
 
-      const updateResponse = await request(app).patch(`/api/v1/parts/${created.id}`).send({ name: `Renamed ${ts}` });
+      const updateResponse = await authApi.patch(`/api/v1/parts/${created.id}`).send({ name: `Renamed ${ts}` });
       expect(updateResponse.status).toBe(200);
       expect(updateResponse.body.name).toBe(`Renamed ${ts}`);
 
-      const deleteResponse = await request(app).delete(`/api/v1/parts/${created.id}`);
+      const deleteResponse = await authApi.delete(`/api/v1/parts/${created.id}`);
       expect(deleteResponse.status).toBe(204);
 
-      const afterDeleteResponse = await request(app).get(`/api/v1/parts/${created.id}`);
+      const afterDeleteResponse = await authApi.get(`/api/v1/parts/${created.id}`);
       expect(afterDeleteResponse.body.isActive).toBe(false);
     });
 
@@ -99,7 +125,7 @@ describe('parts router', () => {
       });
       const reassignTargetCategory = await prisma.category.create({ data: { name: `Reassign Target Category ${ts}` } });
 
-      const createResponse = await request(app).post('/api/v1/parts').send({
+      const createResponse = await authApi.post('/api/v1/parts').send({
         sku: `SKU-REASSIGN-${ts}`,
         manufacturerId,
         manufacturerPartNumber: `MPN-REASSIGN-${ts}`,
@@ -108,7 +134,7 @@ describe('parts router', () => {
       });
       partIds.push(createResponse.body.id);
 
-      const updateResponse = await request(app)
+      const updateResponse = await authApi
         .patch(`/api/v1/parts/${createResponse.body.id}`)
         .send({ manufacturerId: reassignTargetManufacturer.id, categoryId: reassignTargetCategory.id });
 
@@ -123,7 +149,7 @@ describe('parts router', () => {
       // Reassign back onto the shared fixtures before the outer afterAll runs, so
       // the dedicated manufacturer/category are the only rows left referencing
       // this part and can be deleted without violating their Restrict FKs.
-      await request(app)
+      await authApi
         .patch(`/api/v1/parts/${createResponse.body.id}`)
         .send({ manufacturerId, categoryId });
       await prisma.manufacturer.delete({ where: { id: reassignTargetManufacturer.id } });
@@ -131,7 +157,7 @@ describe('parts router', () => {
     });
 
     it('round-trips gradeId and copyOfPartId through create and the response', async () => {
-      const originalResponse = await request(app).post('/api/v1/parts').send({
+      const originalResponse = await authApi.post('/api/v1/parts').send({
         sku: `SKU-FAM-ORIG-${ts}`,
         manufacturerId,
         manufacturerPartNumber: `MPN-FAM-ORIG-${ts}`,
@@ -140,7 +166,7 @@ describe('parts router', () => {
       });
       partIds.push(originalResponse.body.id);
 
-      const copyResponse = await request(app).post('/api/v1/parts').send({
+      const copyResponse = await authApi.post('/api/v1/parts').send({
         sku: `SKU-FAM-COPY-${ts}`,
         manufacturerId,
         manufacturerPartNumber: `MPN-FAM-COPY-${ts}`,
@@ -156,14 +182,14 @@ describe('parts router', () => {
       expect(created.gradeId).toBe(partGradeId);
       expect(created.copyOfPartId).toBe(originalResponse.body.id);
 
-      const getResponse = await request(app).get(`/api/v1/parts/${created.id}`);
+      const getResponse = await authApi.get(`/api/v1/parts/${created.id}`);
       const fetched = partSchema.parse(getResponse.body);
       expect(fetched.gradeId).toBe(partGradeId);
       expect(fetched.copyOfPartId).toBe(originalResponse.body.id);
     });
 
     it('sets and then clears gradeId and copyOfPartId via PATCH', async () => {
-      const originalResponse = await request(app).post('/api/v1/parts').send({
+      const originalResponse = await authApi.post('/api/v1/parts').send({
         sku: `SKU-PATCHFAM-ORIG-${ts}`,
         manufacturerId,
         manufacturerPartNumber: `MPN-PATCHFAM-ORIG-${ts}`,
@@ -172,7 +198,7 @@ describe('parts router', () => {
       });
       partIds.push(originalResponse.body.id);
 
-      const createResponse = await request(app).post('/api/v1/parts').send({
+      const createResponse = await authApi.post('/api/v1/parts').send({
         sku: `SKU-PATCHFAM-${ts}`,
         manufacturerId,
         manufacturerPartNumber: `MPN-PATCHFAM-${ts}`,
@@ -183,20 +209,20 @@ describe('parts router', () => {
       expect(createResponse.body.gradeId).toBeNull();
       expect(createResponse.body.copyOfPartId).toBeNull();
 
-      const setResponse = await request(app)
+      const setResponse = await authApi
         .patch(`/api/v1/parts/${createResponse.body.id}`)
         .send({ gradeId: partGradeId, copyOfPartId: originalResponse.body.id });
       expect(setResponse.status).toBe(200);
       expect(setResponse.body.gradeId).toBe(partGradeId);
       expect(setResponse.body.copyOfPartId).toBe(originalResponse.body.id);
 
-      const unrelatedResponse = await request(app)
+      const unrelatedResponse = await authApi
         .patch(`/api/v1/parts/${createResponse.body.id}`)
         .send({ name: `Patch Family Renamed ${ts}` });
       expect(unrelatedResponse.body.gradeId).toBe(partGradeId);
       expect(unrelatedResponse.body.copyOfPartId).toBe(originalResponse.body.id);
 
-      const clearResponse = await request(app)
+      const clearResponse = await authApi
         .patch(`/api/v1/parts/${createResponse.body.id}`)
         .send({ gradeId: null, copyOfPartId: null });
       expect(clearResponse.status).toBe(200);
@@ -205,20 +231,20 @@ describe('parts router', () => {
     });
 
     it('returns 400 VALIDATION_ERROR when required fields are missing', async () => {
-      const response = await request(app).post('/api/v1/parts').send({ name: 'x' });
+      const response = await authApi.post('/api/v1/parts').send({ name: 'x' });
 
       expect(response.status).toBe(400);
       expect(response.body.error.code).toBe('VALIDATION_ERROR');
     });
 
     it('returns 404 NOT_FOUND for a nonexistent part', async () => {
-      const response = await request(app).get('/api/v1/parts/999999999');
+      const response = await authApi.get('/api/v1/parts/999999999');
 
       expect(response.status).toBe(404);
     });
 
     it('returns 404 NOT_FOUND when manufacturerId does not exist', async () => {
-      const response = await request(app).post('/api/v1/parts').send({
+      const response = await authApi.post('/api/v1/parts').send({
         sku: `SKU-GHOST-MFR-${ts}`,
         manufacturerId: 999999999,
         manufacturerPartNumber: `MPN-GHOST-${ts}`,
@@ -230,7 +256,7 @@ describe('parts router', () => {
     });
 
     it('returns 404 NOT_FOUND when gradeId does not exist', async () => {
-      const response = await request(app).post('/api/v1/parts').send({
+      const response = await authApi.post('/api/v1/parts').send({
         sku: `SKU-GHOST-GRADE-${ts}`,
         manufacturerId,
         manufacturerPartNumber: `MPN-GHOST-GRADE-${ts}`,
@@ -244,12 +270,12 @@ describe('parts router', () => {
 
     it('returns 409 CONFLICT when creating a part with a duplicate sku', async () => {
       const sku = `SKU-DUP-${ts}`;
-      const first = await request(app)
+      const first = await authApi
         .post('/api/v1/parts')
         .send({ sku, manufacturerId, manufacturerPartNumber: `MPN-DUP-A-${ts}`, name: 'A', categoryId });
       partIds.push(first.body.id);
 
-      const second = await request(app)
+      const second = await authApi
         .post('/api/v1/parts')
         .send({ sku, manufacturerId, manufacturerPartNumber: `MPN-DUP-B-${ts}`, name: 'B', categoryId });
 
@@ -259,12 +285,12 @@ describe('parts router', () => {
 
     it('returns 409 CONFLICT when creating a part with a duplicate manufacturerId+manufacturerPartNumber pair', async () => {
       const manufacturerPartNumber = `MPN-DUPPAIR-${ts}`;
-      const first = await request(app)
+      const first = await authApi
         .post('/api/v1/parts')
         .send({ sku: `SKU-DUPPAIR-A-${ts}`, manufacturerId, manufacturerPartNumber, name: 'A', categoryId });
       partIds.push(first.body.id);
 
-      const second = await request(app)
+      const second = await authApi
         .post('/api/v1/parts')
         .send({ sku: `SKU-DUPPAIR-B-${ts}`, manufacturerId, manufacturerPartNumber, name: 'B', categoryId });
 
@@ -309,7 +335,7 @@ describe('parts router', () => {
     });
 
     it('POST linking to a part that is itself a copy returns 400 VALIDATION_ERROR naming the real original', async () => {
-      const response = await request(app).post('/api/v1/parts').send({
+      const response = await authApi.post('/api/v1/parts').send({
         sku: `SKU-FLAT-CHAIN-${ts}`,
         manufacturerId,
         manufacturerPartNumber: `MPN-FLAT-CHAIN-${ts}`,
@@ -324,7 +350,7 @@ describe('parts router', () => {
     });
 
     it('PATCH turning a part that has copies into a copy returns 400 VALIDATION_ERROR', async () => {
-      const response = await request(app)
+      const response = await authApi
         .patch(`/api/v1/parts/${familyOriginalId}`)
         .send({ copyOfPartId: familyStandaloneId });
 
@@ -333,7 +359,7 @@ describe('parts router', () => {
     });
 
     it('PATCH linking a part to itself returns 400 VALIDATION_ERROR', async () => {
-      const response = await request(app)
+      const response = await authApi
         .patch(`/api/v1/parts/${familyStandaloneId}`)
         .send({ copyOfPartId: familyStandaloneId });
 
@@ -408,31 +434,31 @@ describe('parts router', () => {
     });
 
     it('filters by free-text q against the part name', async () => {
-      const response = await request(app).get('/api/v1/parts').query({ q: 'Zorglub' });
+      const response = await authApi.get('/api/v1/parts').query({ q: 'Zorglub' });
 
       expect(response.body.data.map((part: { id: number }) => part.id)).toEqual([searchablePartId]);
     });
 
     it('filters by categoryId', async () => {
-      const response = await request(app).get('/api/v1/parts').query({ categoryId: otherCategoryId });
+      const response = await authApi.get('/api/v1/parts').query({ categoryId: otherCategoryId });
 
       expect(response.body.data.map((part: { id: number }) => part.id)).toEqual([otherCategoryPartId]);
     });
 
     it('filters by manufacturerId', async () => {
-      const response = await request(app).get('/api/v1/parts').query({ manufacturerId: otherManufacturerId });
+      const response = await authApi.get('/api/v1/parts').query({ manufacturerId: otherManufacturerId });
 
       expect(response.body.data.map((part: { id: number }) => part.id)).toEqual([otherManufacturerPartId]);
     });
 
     it('filters by gradeId', async () => {
-      const response = await request(app).get('/api/v1/parts').query({ gradeId: filterGradeId });
+      const response = await authApi.get('/api/v1/parts').query({ gradeId: filterGradeId });
 
       expect(response.body.data.map((part: { id: number }) => part.id)).toEqual([gradedPartId]);
     });
 
     it('filters by isActive=false', async () => {
-      const response = await request(app)
+      const response = await authApi
         .get('/api/v1/parts')
         .query({ isActive: 'false', manufacturerId, categoryId, limit: 100 });
 
@@ -505,7 +531,7 @@ describe('parts router', () => {
     });
 
     it('vehicleClassId matches class-wide and model-specific parts, excluding the universal (fitment-less) part', async () => {
-      const response = await request(app).get('/api/v1/parts').query({ vehicleClassId, limit: 100 });
+      const response = await authApi.get('/api/v1/parts').query({ vehicleClassId, limit: 100 });
 
       const ids = response.body.data.map((part: { id: number }) => part.id);
       expect(ids).toEqual(expect.arrayContaining([classWidePartId, modelSpecificPartId]));
@@ -513,14 +539,14 @@ describe('parts router', () => {
     });
 
     it('vehicleModelId matches class-wide and model-specific parts', async () => {
-      const response = await request(app).get('/api/v1/parts').query({ vehicleModelId, limit: 100 });
+      const response = await authApi.get('/api/v1/parts').query({ vehicleModelId, limit: 100 });
 
       const ids = response.body.data.map((part: { id: number }) => part.id);
       expect(ids).toEqual(expect.arrayContaining([classWidePartId, modelSpecificPartId]));
     });
 
     it('vehicleMakeId matches the model-specific part under that make', async () => {
-      const response = await request(app).get('/api/v1/parts').query({ vehicleMakeId, limit: 100 });
+      const response = await authApi.get('/api/v1/parts').query({ vehicleMakeId, limit: 100 });
 
       const ids = response.body.data.map((part: { id: number }) => part.id);
       expect(ids).toContain(modelSpecificPartId);
@@ -553,7 +579,7 @@ describe('parts router', () => {
     });
 
     it('finds a part by SKU and reports matchedBy', async () => {
-      const response = await request(app).get('/api/v1/parts/search').query({ number: sku });
+      const response = await authApi.get('/api/v1/parts/search').query({ number: sku });
 
       expect(response.status).toBe(200);
       expect(response.body.data).toHaveLength(1);
@@ -563,7 +589,7 @@ describe('parts router', () => {
     });
 
     it('finds a part by a cross-reference number and reports matchedBy', async () => {
-      const response = await request(app).get('/api/v1/parts/search').query({ number: crossRefNumber });
+      const response = await authApi.get('/api/v1/parts/search').query({ number: crossRefNumber });
 
       expect(response.body.data[0].matchedBy).toBe('CROSS_REFERENCE');
       expect(response.body.data[0].id).toBe(searchPartId);
@@ -572,7 +598,7 @@ describe('parts router', () => {
     it('recomputes skuNormalized on PATCH so search follows the new sku', async () => {
       const oldSku = `RECOMP-OLD-SKU-${ts}`;
       const newSku = `RECOMP-NEW-SKU-${ts}`;
-      const createResponse = await request(app).post('/api/v1/parts').send({
+      const createResponse = await authApi.post('/api/v1/parts').send({
         sku: oldSku,
         manufacturerId,
         manufacturerPartNumber: `RECOMP-SKU-MPN-${ts}`,
@@ -581,19 +607,19 @@ describe('parts router', () => {
       });
       partIds.push(createResponse.body.id);
 
-      const beforePatch = await request(app).get('/api/v1/parts/search').query({ number: oldSku });
+      const beforePatch = await authApi.get('/api/v1/parts/search').query({ number: oldSku });
       expect(beforePatch.body.data).toHaveLength(1);
       expect(beforePatch.body.data[0].matchedBy).toBe('SKU');
 
-      const patchResponse = await request(app)
+      const patchResponse = await authApi
         .patch(`/api/v1/parts/${createResponse.body.id}`)
         .send({ sku: newSku });
       expect(patchResponse.status).toBe(200);
 
-      const oldAfterPatch = await request(app).get('/api/v1/parts/search').query({ number: oldSku });
+      const oldAfterPatch = await authApi.get('/api/v1/parts/search').query({ number: oldSku });
       expect(oldAfterPatch.body.data).toHaveLength(0);
 
-      const newAfterPatch = await request(app).get('/api/v1/parts/search').query({ number: newSku });
+      const newAfterPatch = await authApi.get('/api/v1/parts/search').query({ number: newSku });
       expect(newAfterPatch.body.data).toHaveLength(1);
       expect(newAfterPatch.body.data[0].matchedBy).toBe('SKU');
       expect(newAfterPatch.body.data[0].id).toBe(createResponse.body.id);
@@ -602,7 +628,7 @@ describe('parts router', () => {
     it('recomputes mpnNormalized on PATCH so search follows the new manufacturer part number', async () => {
       const oldMpn = `RECOMP-OLD-MPN-${ts}`;
       const newMpn = `RECOMP-NEW-MPN-${ts}`;
-      const createResponse = await request(app).post('/api/v1/parts').send({
+      const createResponse = await authApi.post('/api/v1/parts').send({
         sku: `RECOMP-MPN-SKU-${ts}`,
         manufacturerId,
         manufacturerPartNumber: oldMpn,
@@ -611,26 +637,26 @@ describe('parts router', () => {
       });
       partIds.push(createResponse.body.id);
 
-      const beforePatch = await request(app).get('/api/v1/parts/search').query({ number: oldMpn });
+      const beforePatch = await authApi.get('/api/v1/parts/search').query({ number: oldMpn });
       expect(beforePatch.body.data).toHaveLength(1);
       expect(beforePatch.body.data[0].matchedBy).toBe('MPN');
 
-      const patchResponse = await request(app)
+      const patchResponse = await authApi
         .patch(`/api/v1/parts/${createResponse.body.id}`)
         .send({ manufacturerPartNumber: newMpn });
       expect(patchResponse.status).toBe(200);
 
-      const oldAfterPatch = await request(app).get('/api/v1/parts/search').query({ number: oldMpn });
+      const oldAfterPatch = await authApi.get('/api/v1/parts/search').query({ number: oldMpn });
       expect(oldAfterPatch.body.data).toHaveLength(0);
 
-      const newAfterPatch = await request(app).get('/api/v1/parts/search').query({ number: newMpn });
+      const newAfterPatch = await authApi.get('/api/v1/parts/search').query({ number: newMpn });
       expect(newAfterPatch.body.data).toHaveLength(1);
       expect(newAfterPatch.body.data[0].matchedBy).toBe('MPN');
       expect(newAfterPatch.body.data[0].id).toBe(createResponse.body.id);
     });
 
     it('returns 400 VALIDATION_ERROR when number is missing', async () => {
-      const response = await request(app).get('/api/v1/parts/search');
+      const response = await authApi.get('/api/v1/parts/search');
 
       expect(response.status).toBe(400);
       expect(response.body.error.code).toBe('VALIDATION_ERROR');
@@ -689,7 +715,7 @@ describe('parts router', () => {
     });
 
     it('embeds all four related collections when include=fitments,crossReferences,suppliers,inventory', async () => {
-      const response = await request(app)
+      const response = await authApi
         .get(`/api/v1/parts/${p360PartId}`)
         .query({ include: 'fitments,crossReferences,suppliers,inventory' });
 
@@ -705,7 +731,7 @@ describe('parts router', () => {
     });
 
     it('omits every related collection when include is not given', async () => {
-      const response = await request(app).get(`/api/v1/parts/${p360PartId}`);
+      const response = await authApi.get(`/api/v1/parts/${p360PartId}`);
 
       expect(response.status).toBe(200);
       expect(response.body.fitments).toBeUndefined();
@@ -749,7 +775,7 @@ describe('parts router', () => {
     });
 
     it('creates, lists, and deletes a fitment, asserting the Location header', async () => {
-      const createResponse = await request(app)
+      const createResponse = await authApi
         .post(`/api/v1/parts/${fitmentPartId}/fitments`)
         .send({ vehicleClassId, vehicleMakeId, vehicleModelId });
 
@@ -758,24 +784,24 @@ describe('parts router', () => {
         `/api/v1/parts/${fitmentPartId}/fitments/${createResponse.body.id}`,
       );
 
-      const listResponse = await request(app).get(`/api/v1/parts/${fitmentPartId}/fitments`);
+      const listResponse = await authApi.get(`/api/v1/parts/${fitmentPartId}/fitments`);
       expect(listResponse.body.data.some((fitment: { id: number }) => fitment.id === createResponse.body.id)).toBe(
         true,
       );
 
-      const deleteResponse = await request(app).delete(
+      const deleteResponse = await authApi.delete(
         `/api/v1/parts/${fitmentPartId}/fitments/${createResponse.body.id}`,
       );
       expect(deleteResponse.status).toBe(204);
 
-      const afterDeleteResponse = await request(app).get(`/api/v1/parts/${fitmentPartId}/fitments`);
+      const afterDeleteResponse = await authApi.get(`/api/v1/parts/${fitmentPartId}/fitments`);
       expect(
         afterDeleteResponse.body.data.some((fitment: { id: number }) => fitment.id === createResponse.body.id),
       ).toBe(false);
     });
 
     it('returns 400 VALIDATION_ERROR when vehicleModelId is set without vehicleMakeId', async () => {
-      const response = await request(app)
+      const response = await authApi
         .post(`/api/v1/parts/${fitmentPartId}/fitments`)
         .send({ vehicleClassId, vehicleModelId });
 
@@ -784,22 +810,22 @@ describe('parts router', () => {
     });
 
     it('returns 404 NOT_FOUND when the part does not exist', async () => {
-      const response = await request(app).post('/api/v1/parts/999999999/fitments').send({ vehicleClassId });
+      const response = await authApi.post('/api/v1/parts/999999999/fitments').send({ vehicleClassId });
 
       expect(response.status).toBe(404);
     });
 
     it('returns 404 NOT_FOUND when deleting a nonexistent fitment', async () => {
-      const response = await request(app).delete(`/api/v1/parts/${fitmentPartId}/fitments/999999999`);
+      const response = await authApi.delete(`/api/v1/parts/${fitmentPartId}/fitments/999999999`);
 
       expect(response.status).toBe(404);
     });
 
     it('returns 409 CONFLICT when creating the same class-level fitment twice', async () => {
-      const first = await request(app).post(`/api/v1/parts/${fitmentPartId}/fitments`).send({ vehicleClassId });
+      const first = await authApi.post(`/api/v1/parts/${fitmentPartId}/fitments`).send({ vehicleClassId });
       expect(first.status).toBe(201);
 
-      const second = await request(app).post(`/api/v1/parts/${fitmentPartId}/fitments`).send({ vehicleClassId });
+      const second = await authApi.post(`/api/v1/parts/${fitmentPartId}/fitments`).send({ vehicleClassId });
 
       expect(second.status).toBe(409);
       expect(second.body.error.code).toBe('CONFLICT');
@@ -821,7 +847,7 @@ describe('parts router', () => {
     });
 
     it('creates, lists, and deletes a cross-reference, asserting the Location header', async () => {
-      const createResponse = await request(app)
+      const createResponse = await authApi
         .post(`/api/v1/parts/${crossRefPartId}/cross-references`)
         .send({ refType: 'OEM', refNumber: `XREF-NUM-${ts}`, refBrand: 'Bosch' });
 
@@ -830,17 +856,17 @@ describe('parts router', () => {
         `/api/v1/parts/${crossRefPartId}/cross-references/${createResponse.body.id}`,
       );
 
-      const listResponse = await request(app).get(`/api/v1/parts/${crossRefPartId}/cross-references`);
+      const listResponse = await authApi.get(`/api/v1/parts/${crossRefPartId}/cross-references`);
       expect(listResponse.body.data.some((ref: { id: number }) => ref.id === createResponse.body.id)).toBe(true);
 
-      const deleteResponse = await request(app).delete(
+      const deleteResponse = await authApi.delete(
         `/api/v1/parts/${crossRefPartId}/cross-references/${createResponse.body.id}`,
       );
       expect(deleteResponse.status).toBe(204);
     });
 
     it('returns 400 VALIDATION_ERROR when refType is invalid', async () => {
-      const response = await request(app)
+      const response = await authApi
         .post(`/api/v1/parts/${crossRefPartId}/cross-references`)
         .send({ refType: 'BOGUS', refNumber: 'x' });
 
@@ -848,7 +874,7 @@ describe('parts router', () => {
     });
 
     it('returns 404 NOT_FOUND when the part does not exist', async () => {
-      const response = await request(app)
+      const response = await authApi
         .post('/api/v1/parts/999999999/cross-references')
         .send({ refType: 'OEM', refNumber: 'x' });
 
@@ -856,7 +882,7 @@ describe('parts router', () => {
     });
 
     it('returns 404 NOT_FOUND when deleting a nonexistent cross-reference', async () => {
-      const response = await request(app).delete(`/api/v1/parts/${crossRefPartId}/cross-references/999999999`);
+      const response = await authApi.delete(`/api/v1/parts/${crossRefPartId}/cross-references/999999999`);
 
       expect(response.status).toBe(404);
     });
@@ -885,7 +911,7 @@ describe('parts router', () => {
     });
 
     it('creates, lists, updates, and deletes a supplier link, asserting the Location header', async () => {
-      const createResponse = await request(app)
+      const createResponse = await authApi
         .post(`/api/v1/parts/${supplierPartOwnerId}/suppliers`)
         .send({ supplierId, supplierPartNumber: `SUPL-NUM-${ts}` });
 
@@ -895,35 +921,35 @@ describe('parts router', () => {
       );
       expect(createResponse.body.isPreferred).toBe(false);
 
-      const listResponse = await request(app).get(`/api/v1/parts/${supplierPartOwnerId}/suppliers`);
+      const listResponse = await authApi.get(`/api/v1/parts/${supplierPartOwnerId}/suppliers`);
       expect(listResponse.body.data.some((link: { id: number }) => link.id === createResponse.body.id)).toBe(true);
 
-      const updateResponse = await request(app)
+      const updateResponse = await authApi
         .patch(`/api/v1/parts/${supplierPartOwnerId}/suppliers/${createResponse.body.id}`)
         .send({ isPreferred: true });
       expect(updateResponse.status).toBe(200);
       expect(updateResponse.body.isPreferred).toBe(true);
 
-      const deleteResponse = await request(app).delete(
+      const deleteResponse = await authApi.delete(
         `/api/v1/parts/${supplierPartOwnerId}/suppliers/${createResponse.body.id}`,
       );
       expect(deleteResponse.status).toBe(204);
     });
 
     it('returns 400 VALIDATION_ERROR when supplierId is missing', async () => {
-      const response = await request(app).post(`/api/v1/parts/${supplierPartOwnerId}/suppliers`).send({});
+      const response = await authApi.post(`/api/v1/parts/${supplierPartOwnerId}/suppliers`).send({});
 
       expect(response.status).toBe(400);
     });
 
     it('returns 404 NOT_FOUND when the part does not exist', async () => {
-      const response = await request(app).post('/api/v1/parts/999999999/suppliers').send({ supplierId });
+      const response = await authApi.post('/api/v1/parts/999999999/suppliers').send({ supplierId });
 
       expect(response.status).toBe(404);
     });
 
     it('returns 404 NOT_FOUND when updating a nonexistent supplier link', async () => {
-      const response = await request(app)
+      const response = await authApi
         .patch(`/api/v1/parts/${supplierPartOwnerId}/suppliers/999999999`)
         .send({ isPreferred: true });
 
@@ -932,7 +958,6 @@ describe('parts router', () => {
   });
 
   describe('GET /parts/:id/family', () => {
-    let familyShopId: number;
     let familyOriginalId: number;
     let earlyCopyId: number;
     let lateCopyId: number;
@@ -986,23 +1011,18 @@ describe('parts router', () => {
       earlyCopyId = earlyCopy.id;
       partIds.push(earlyCopyId);
 
-      const shop = await prisma.shop.create({ data: { name: `Family Shop ${ts}` } });
-      familyShopId = shop.id;
+      // Stock the caller's own shop: the family endpoint only projects stock for
+      // req.user.shopId, so per-shop stock must live in the authenticated shop.
       await prisma.inventoryItem.create({
-        data: { shopId: familyShopId, partId: familyOriginalId, quantityOnHand: 7, sellingPrice: 120.5 },
+        data: { shopId: authShopId, partId: familyOriginalId, quantityOnHand: 7, sellingPrice: 120.5 },
       });
       await prisma.inventoryItem.create({
-        data: { shopId: familyShopId, partId: earlyCopyId, quantityOnHand: 3, sellingPrice: 99.99 },
+        data: { shopId: authShopId, partId: earlyCopyId, quantityOnHand: 3, sellingPrice: 99.99 },
       });
-    });
-
-    afterAll(async () => {
-      await prisma.inventoryItem.deleteMany({ where: { shopId: familyShopId } });
-      await prisma.shop.delete({ where: { id: familyShopId } });
     });
 
     it('returns the original first and copies ordered by grade displayOrder', async () => {
-      const response = await request(app).get(`/api/v1/parts/${familyOriginalId}/family`);
+      const response = await authApi.get(`/api/v1/parts/${familyOriginalId}/family`);
 
       expect(response.status).toBe(200);
       expect(response.body.original.id).toBe(familyOriginalId);
@@ -1016,9 +1036,9 @@ describe('parts router', () => {
     });
 
     it('carries per-shop stock on stocked members and explicit nulls on the unstocked copy when shopId is given', async () => {
-      const response = await request(app)
+      const response = await authApi
         .get(`/api/v1/parts/${familyOriginalId}/family`)
-        .query({ shopId: familyShopId });
+        .query({ shopId: authShopId });
 
       expect(response.status).toBe(200);
       for (const member of [response.body.original, ...response.body.copies]) {
@@ -1037,7 +1057,7 @@ describe('parts router', () => {
     });
 
     it('omits the stock keys entirely when shopId is not given', async () => {
-      const response = await request(app).get(`/api/v1/parts/${familyOriginalId}/family`);
+      const response = await authApi.get(`/api/v1/parts/${familyOriginalId}/family`);
 
       expect(response.status).toBe(200);
       for (const member of [response.body.original, ...response.body.copies]) {
@@ -1047,8 +1067,8 @@ describe('parts router', () => {
     });
 
     it('returns the identical family when called from a copy', async () => {
-      const fromOriginal = await request(app).get(`/api/v1/parts/${familyOriginalId}/family`);
-      const fromCopy = await request(app).get(`/api/v1/parts/${lateCopyId}/family`);
+      const fromOriginal = await authApi.get(`/api/v1/parts/${familyOriginalId}/family`);
+      const fromCopy = await authApi.get(`/api/v1/parts/${lateCopyId}/family`);
 
       expect(fromCopy.status).toBe(200);
       expect(fromCopy.body.original.id).toBe(fromOriginal.body.original.id);
@@ -1059,17 +1079,18 @@ describe('parts router', () => {
     });
 
     it('returns 404 NOT_FOUND for an unknown part', async () => {
-      const response = await request(app).get('/api/v1/parts/999999999/family');
+      const response = await authApi.get('/api/v1/parts/999999999/family');
 
       expect(response.status).toBe(404);
     });
 
-    it('returns 404 NOT_FOUND for an unknown shopId', async () => {
-      const response = await request(app)
+    it("forbids requesting another shop's stock via a foreign shopId (403)", async () => {
+      const response = await authApi
         .get(`/api/v1/parts/${familyOriginalId}/family`)
         .query({ shopId: 999999999 });
 
-      expect(response.status).toBe(404);
+      expect(response.status).toBe(403);
+      expect(response.body.error.code).toBe('FORBIDDEN');
     });
   });
 });

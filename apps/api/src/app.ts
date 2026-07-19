@@ -6,7 +6,9 @@ import swaggerUi from 'swagger-ui-express';
 import YAML from 'yaml';
 
 import { resolveOpenApiPath } from './lib/openapiPath';
+import { authenticate } from './middleware/authenticate';
 import { errorHandler } from './middleware/errorHandler';
+import { authRouter } from './routes/auth';
 import { categoriesRouter } from './routes/categories';
 import { inventoryRouter } from './routes/inventory';
 import { manufacturersRouter } from './routes/manufacturers';
@@ -38,6 +40,13 @@ app.get('/health', (_req, res) => {
 
 const openApiDocument: Record<string, unknown> = YAML.parse(readFileSync(resolveOpenApiPath(), 'utf-8'));
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(openApiDocument));
+
+app.use('/api/v1', authRouter);
+
+// Global gate: every /api/v1/* route below requires a valid Bearer token.
+// authRouter is mounted above so POST /auth/login (and the already-authenticated
+// /auth/me, /auth/logout) are matched before this gate.
+app.use('/api/v1', authenticate);
 
 app.use('/api/v1', manufacturersRouter);
 app.use('/api/v1', categoriesRouter);

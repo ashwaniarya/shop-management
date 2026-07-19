@@ -9,7 +9,9 @@ import { buildMeta, toSkipTake } from '../lib/pagination';
 import { requireIdParam } from '../lib/params';
 import { prisma } from '../lib/prisma';
 import { serializeStockTransaction } from '../lib/serialize';
+import { requireSameShop } from '../middleware/authorize';
 import { getQuery, validate, validateQuery } from '../middleware/validate';
+import { ForbiddenError } from '../services/errors';
 import { appendStockTransaction, getTransactionsSummary } from '../services/stockLedger';
 
 export const stockTransactionsRouter = Router();
@@ -24,6 +26,7 @@ const listStockTransactionsQuerySchema = paginationQuerySchema.extend({
 
 stockTransactionsRouter.get(
   '/shops/:shopId/stock-transactions',
+  requireSameShop(),
   validateQuery(listStockTransactionsQuerySchema),
   asyncHandler(async (req, res) => {
     const shopId = requireIdParam(req.params.shopId, 'shopId');
@@ -59,17 +62,25 @@ stockTransactionsRouter.get(
 
 stockTransactionsRouter.post(
   '/shops/:shopId/stock-transactions',
+  requireSameShop(),
   validate(stockTransactionCreateSchema),
   asyncHandler(async (req, res) => {
     const shopId = requireIdParam(req.params.shopId, 'shopId');
+    const { type } = req.body;
 
+    // STAFF may only record sales; PURCHASE/ADJUSTMENT are manager/owner actions.
+    if (type !== 'SALE' && req.user!.role === 'STAFF') {
+      throw new ForbiddenError('Staff can only record sales');
+    }
+
+    // The acting user is taken from the authenticated token, never the body.
     // appendStockTransaction already validates shop/part/user existence and the
     // sign/insufficient-stock rules, so no separate pre-checks are needed here.
     const { transaction } = await appendStockTransaction({
       shopId,
       partId: req.body.partId,
-      userId: req.body.userId,
-      type: req.body.type,
+      userId: req.user!.id,
+      type,
       quantity: req.body.quantity,
       unitPrice: req.body.unitPrice ?? undefined,
       notes: req.body.notes ?? undefined,
@@ -89,6 +100,7 @@ const summaryQuerySchema = z.object({
 
 stockTransactionsRouter.get(
   '/shops/:shopId/stock-transactions/summary',
+  requireSameShop(),
   validateQuery(summaryQuerySchema),
   asyncHandler(async (req, res) => {
     const shopId = requireIdParam(req.params.shopId, 'shopId');

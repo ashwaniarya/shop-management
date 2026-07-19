@@ -19,4 +19,15 @@ pnpm --filter api db:seed
 pnpm dev              # api on :4000 (Swagger at /docs), web on :3000
 ```
 
+### Demo logins
+
+Seeded by `apps/api/prisma/seed.ts` — sign in via `POST /auth/login` with `{ username, pin }`:
+
+| Username  | PIN  | Shop    | Role    |
+|-----------|------|---------|---------|
+| `owner`   | 1111 | Main    | OWNER   |
+| `manager` | 2222 | Main    | MANAGER |
+| `staff`   | 3333 | Main    | STAFF   |
+| `highway` | 4444 | Highway | OWNER   |
+
 Deployment target: Railway (Postgres + api + web services).

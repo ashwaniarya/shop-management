@@ -13,5 +13,6 @@ export * from './partCrossReference';
 export * from './supplierPart';
 export * from './shop';
 export * from './user';
+export * from './auth';
 export * from './inventoryItem';
 export * from './stockTransaction';

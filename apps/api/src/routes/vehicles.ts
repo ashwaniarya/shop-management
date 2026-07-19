@@ -15,6 +15,7 @@ import { asyncHandler } from '../lib/asyncHandler';
 import { buildMeta, toSkipTake } from '../lib/pagination';
 import { requireIdParam } from '../lib/params';
 import { prisma } from '../lib/prisma';
+import { requireRole } from '../middleware/authorize';
 import { getQuery, validate, validateQuery } from '../middleware/validate';
 import { NotFoundError } from '../services/errors';
 
@@ -40,6 +41,7 @@ vehiclesRouter.get(
 
 vehiclesRouter.post(
   '/vehicle-classes',
+  requireRole('OWNER', 'MANAGER'),
   validate(vehicleClassCreateSchema),
   asyncHandler(async (req, res) => {
     const vehicleClass = await prisma.vehicleClass.create({ data: req.body });
@@ -63,6 +65,7 @@ vehiclesRouter.get(
 
 vehiclesRouter.patch(
   '/vehicle-classes/:id',
+  requireRole('OWNER', 'MANAGER'),
   validate(vehicleClassUpdateSchema),
   asyncHandler(async (req, res) => {
     const id = requireIdParam(req.params.id);
@@ -74,6 +77,7 @@ vehiclesRouter.patch(
 
 vehiclesRouter.delete(
   '/vehicle-classes/:id',
+  requireRole('OWNER', 'MANAGER'),
   asyncHandler(async (req, res) => {
     const id = requireIdParam(req.params.id);
     await prisma.vehicleClass.update({ where: { id }, data: { isActive: false } });
@@ -102,6 +106,7 @@ vehiclesRouter.get(
 
 vehiclesRouter.post(
   '/vehicle-makes',
+  requireRole('OWNER', 'MANAGER'),
   validate(vehicleMakeCreateSchema),
   asyncHandler(async (req, res) => {
     const vehicleMake = await prisma.vehicleMake.create({ data: req.body });
@@ -125,6 +130,7 @@ vehiclesRouter.get(
 
 vehiclesRouter.patch(
   '/vehicle-makes/:id',
+  requireRole('OWNER', 'MANAGER'),
   validate(vehicleMakeUpdateSchema),
   asyncHandler(async (req, res) => {
     const id = requireIdParam(req.params.id);
@@ -136,6 +142,7 @@ vehiclesRouter.patch(
 
 vehiclesRouter.delete(
   '/vehicle-makes/:id',
+  requireRole('OWNER', 'MANAGER'),
   asyncHandler(async (req, res) => {
     const id = requireIdParam(req.params.id);
     await prisma.vehicleMake.update({ where: { id }, data: { isActive: false } });
@@ -173,6 +180,7 @@ vehiclesRouter.get(
 
 vehiclesRouter.post(
   '/vehicle-models',
+  requireRole('OWNER', 'MANAGER'),
   validate(vehicleModelCreateSchema),
   asyncHandler(async (req, res) => {
     await requireVehicleMake(req.body.vehicleMakeId);
@@ -199,6 +207,7 @@ vehiclesRouter.get(
 
 vehiclesRouter.patch(
   '/vehicle-models/:id',
+  requireRole('OWNER', 'MANAGER'),
   validate(vehicleModelUpdateSchema),
   asyncHandler(async (req, res) => {
     const id = requireIdParam(req.params.id);
@@ -217,6 +226,7 @@ vehiclesRouter.patch(
 
 vehiclesRouter.delete(
   '/vehicle-models/:id',
+  requireRole('OWNER', 'MANAGER'),
   asyncHandler(async (req, res) => {
     const id = requireIdParam(req.params.id);
     await prisma.vehicleModel.update({ where: { id }, data: { isActive: false } });

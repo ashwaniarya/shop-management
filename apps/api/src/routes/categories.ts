@@ -9,6 +9,7 @@ import { buildMeta, toSkipTake } from '../lib/pagination';
 import { requireIdParam } from '../lib/params';
 import { prisma } from '../lib/prisma';
 import { booleanQueryParam } from '../lib/queryBoolean';
+import { requireRole } from '../middleware/authorize';
 import { getQuery, validate, validateQuery } from '../middleware/validate';
 import { ConflictError, NotFoundError } from '../services/errors';
 
@@ -70,6 +71,7 @@ categoriesRouter.get(
 
 categoriesRouter.post(
   '/categories',
+  requireRole('OWNER', 'MANAGER'),
   validate(categoryCreateSchema),
   asyncHandler(async (req, res) => {
     await requireParentCategory(req.body.parentCategoryId);
@@ -95,6 +97,7 @@ categoriesRouter.get(
 
 categoriesRouter.patch(
   '/categories/:id',
+  requireRole('OWNER', 'MANAGER'),
   validate(categoryUpdateSchema),
   asyncHandler(async (req, res) => {
     const id = requireIdParam(req.params.id);
@@ -108,6 +111,7 @@ categoriesRouter.patch(
 
 categoriesRouter.delete(
   '/categories/:id',
+  requireRole('OWNER', 'MANAGER'),
   asyncHandler(async (req, res) => {
     const id = requireIdParam(req.params.id);
     const category = await prisma.category.findUnique({ where: { id } });

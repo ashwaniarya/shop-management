@@ -5,6 +5,7 @@ import { asyncHandler } from '../lib/asyncHandler';
 import { buildMeta, toSkipTake } from '../lib/pagination';
 import { requireIdParam } from '../lib/params';
 import { prisma } from '../lib/prisma';
+import { requireRole } from '../middleware/authorize';
 import { getQuery, validate, validateQuery } from '../middleware/validate';
 import { NotFoundError } from '../services/errors';
 
@@ -28,6 +29,7 @@ partGradesRouter.get(
 
 partGradesRouter.post(
   '/part-grades',
+  requireRole('OWNER', 'MANAGER'),
   validate(partGradeCreateSchema),
   asyncHandler(async (req, res) => {
     const partGrade = await prisma.partGrade.create({ data: req.body });
@@ -51,6 +53,7 @@ partGradesRouter.get(
 
 partGradesRouter.patch(
   '/part-grades/:id',
+  requireRole('OWNER', 'MANAGER'),
   validate(partGradeUpdateSchema),
   asyncHandler(async (req, res) => {
     const id = requireIdParam(req.params.id);
@@ -62,6 +65,7 @@ partGradesRouter.patch(
 
 partGradesRouter.delete(
   '/part-grades/:id',
+  requireRole('OWNER', 'MANAGER'),
   asyncHandler(async (req, res) => {
     const id = requireIdParam(req.params.id);
     await prisma.partGrade.update({ where: { id }, data: { isActive: false } });

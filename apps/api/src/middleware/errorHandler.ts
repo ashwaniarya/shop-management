@@ -2,7 +2,14 @@ import { Prisma } from '@prisma/client';
 import type { NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
 
-import { ConflictError, DomainValidationError, InsufficientStockError, NotFoundError } from '../services/errors';
+import {
+  ConflictError,
+  DomainValidationError,
+  ForbiddenError,
+  InsufficientStockError,
+  NotFoundError,
+  UnauthorizedError,
+} from '../services/errors';
 
 export function errorHandler(error: unknown, _req: Request, res: Response, next: NextFunction): void {
   if (res.headersSent) {
@@ -42,6 +49,16 @@ export function errorHandler(error: unknown, _req: Request, res: Response, next:
 
   if (error instanceof ConflictError) {
     res.status(409).json({ error: { code: 'CONFLICT', message: error.message } });
+    return;
+  }
+
+  if (error instanceof UnauthorizedError) {
+    res.status(401).json({ error: { code: 'UNAUTHORIZED', message: error.message } });
+    return;
+  }
+
+  if (error instanceof ForbiddenError) {
+    res.status(403).json({ error: { code: 'FORBIDDEN', message: error.message } });
     return;
   }
 

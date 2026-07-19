@@ -6,6 +6,7 @@ import { asyncHandler } from '../lib/asyncHandler';
 import { buildMeta, toSkipTake } from '../lib/pagination';
 import { requireIdParam } from '../lib/params';
 import { prisma } from '../lib/prisma';
+import { requireRole, requireSameShop } from '../middleware/authorize';
 import { getQuery, validate, validateQuery } from '../middleware/validate';
 import { NotFoundError } from '../services/errors';
 
@@ -31,6 +32,7 @@ shopsRouter.get(
 
 shopsRouter.post(
   '/shops',
+  requireRole('OWNER'),
   validate(shopCreateSchema),
   asyncHandler(async (req, res) => {
     const shop = await prisma.shop.create({ data: req.body });
@@ -51,6 +53,7 @@ shopsRouter.get(
 
 shopsRouter.patch(
   '/shops/:id',
+  requireRole('OWNER'),
   validate(shopUpdateSchema),
   asyncHandler(async (req, res) => {
     const id = requireIdParam(req.params.id);
@@ -62,6 +65,7 @@ shopsRouter.patch(
 
 shopsRouter.delete(
   '/shops/:id',
+  requireRole('OWNER'),
   asyncHandler(async (req, res) => {
     const id = requireIdParam(req.params.id);
     await prisma.shop.update({ where: { id }, data: { isActive: false } });
@@ -82,6 +86,7 @@ async function requireShopUser(shopId: number, userId: number) {
 
 shopsRouter.get(
   '/shops/:shopId/users',
+  requireSameShop(),
   validateQuery(paginationQuerySchema),
   asyncHandler(async (req, res) => {
     const shopId = requireIdParam(req.params.shopId, 'shopId');
@@ -100,6 +105,8 @@ shopsRouter.get(
 
 shopsRouter.post(
   '/shops/:shopId/users',
+  requireRole('OWNER'),
+  requireSameShop(),
   validate(userCreateSchema),
   asyncHandler(async (req, res) => {
     const shopId = requireIdParam(req.params.shopId, 'shopId');
@@ -113,6 +120,7 @@ shopsRouter.post(
 
 shopsRouter.get(
   '/shops/:shopId/users/:id',
+  requireSameShop(),
   asyncHandler(async (req, res) => {
     const shopId = requireIdParam(req.params.shopId, 'shopId');
     const id = requireIdParam(req.params.id);
@@ -124,6 +132,8 @@ shopsRouter.get(
 
 shopsRouter.patch(
   '/shops/:shopId/users/:id',
+  requireRole('OWNER'),
+  requireSameShop(),
   validate(userUpdateSchema),
   asyncHandler(async (req, res) => {
     const shopId = requireIdParam(req.params.shopId, 'shopId');
@@ -138,6 +148,8 @@ shopsRouter.patch(
 
 shopsRouter.delete(
   '/shops/:shopId/users/:id',
+  requireRole('OWNER'),
+  requireSameShop(),
   asyncHandler(async (req, res) => {
     const shopId = requireIdParam(req.params.shopId, 'shopId');
     const id = requireIdParam(req.params.id);

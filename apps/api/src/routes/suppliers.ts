@@ -5,6 +5,7 @@ import { asyncHandler } from '../lib/asyncHandler';
 import { buildMeta, toSkipTake } from '../lib/pagination';
 import { requireIdParam } from '../lib/params';
 import { prisma } from '../lib/prisma';
+import { requireRole } from '../middleware/authorize';
 import { getQuery, validate, validateQuery } from '../middleware/validate';
 import { NotFoundError } from '../services/errors';
 
@@ -28,6 +29,7 @@ suppliersRouter.get(
 
 suppliersRouter.post(
   '/suppliers',
+  requireRole('OWNER', 'MANAGER'),
   validate(supplierCreateSchema),
   asyncHandler(async (req, res) => {
     const supplier = await prisma.supplier.create({ data: req.body });
@@ -51,6 +53,7 @@ suppliersRouter.get(
 
 suppliersRouter.patch(
   '/suppliers/:id',
+  requireRole('OWNER', 'MANAGER'),
   validate(supplierUpdateSchema),
   asyncHandler(async (req, res) => {
     const id = requireIdParam(req.params.id);
@@ -62,6 +65,7 @@ suppliersRouter.patch(
 
 suppliersRouter.delete(
   '/suppliers/:id',
+  requireRole('OWNER', 'MANAGER'),
   asyncHandler(async (req, res) => {
     const id = requireIdParam(req.params.id);
     await prisma.supplier.update({ where: { id }, data: { isActive: false } });

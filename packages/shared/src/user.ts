@@ -9,6 +9,7 @@ export const userSchema = z.object({
   name: z.string(),
   phone: z.string().nullable(),
   email: z.string().nullable(),
+  username: z.string().nullable(),
   role: userRoleSchema,
   isActive: z.boolean(),
   createdAt: z.string(),
@@ -20,6 +21,8 @@ export const userCreateSchema = z.object({
   name: z.string().min(1, 'name must not be empty'),
   phone: z.string().nullable().optional(),
   email: z.string().nullable().optional(),
+  username: z.string().min(3).optional(),
+  pin: z.string().regex(/^\d{4,6}$/, 'PIN must be 4–6 digits').optional(),
   role: userRoleSchema,
 });
 export type UserCreate = z.infer<typeof userCreateSchema>;

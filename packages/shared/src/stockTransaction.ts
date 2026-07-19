@@ -18,7 +18,6 @@ export type StockTransaction = z.infer<typeof stockTransactionSchema>;
 
 const stockTransactionCreateShape = z.object({
   partId: z.number().int(),
-  userId: z.number().int(),
   type: stockTransactionTypeSchema,
   quantity: z.number(),
   unitPrice: z.number().nullable().optional(),

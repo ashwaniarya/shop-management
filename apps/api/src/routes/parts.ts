@@ -25,6 +25,8 @@ import {
   serializePartFitment,
   serializeSupplierPart,
 } from '../lib/serialize';
+import { requireRole } from '../middleware/authorize';
+import { ForbiddenError } from '../services/errors';
 import { getQuery, validate, validateQuery } from '../middleware/validate';
 import { NotFoundError } from '../services/errors';
 import { buildFitmentWhere, validateFitmentInput } from '../services/fitment';
@@ -86,6 +88,7 @@ partsRouter.get(
 
 partsRouter.post(
   '/parts',
+  requireRole('OWNER', 'MANAGER'),
   validate(partCreateSchema),
   asyncHandler(async (req, res) => {
     await requireManufacturer(req.body.manufacturerId);
@@ -205,6 +208,7 @@ partsRouter.get(
 
 partsRouter.patch(
   '/parts/:id',
+  requireRole('OWNER', 'MANAGER'),
   validate(partUpdateSchema),
   asyncHandler(async (req, res) => {
     const id = requireIdParam(req.params.id);
@@ -238,6 +242,7 @@ partsRouter.patch(
 
 partsRouter.delete(
   '/parts/:id',
+  requireRole('OWNER', 'MANAGER'),
   asyncHandler(async (req, res) => {
     const id = requireIdParam(req.params.id);
     await prisma.part.update({ where: { id }, data: { isActive: false } });
@@ -268,6 +273,7 @@ partsRouter.get(
 
 partsRouter.post(
   '/parts/:id/fitments',
+  requireRole('OWNER', 'MANAGER'),
   validate(partFitmentCreateSchema),
   asyncHandler(async (req, res) => {
     const partId = requireIdParam(req.params.id);
@@ -298,6 +304,7 @@ partsRouter.post(
 
 partsRouter.delete(
   '/parts/:id/fitments/:fitmentId',
+  requireRole('OWNER', 'MANAGER'),
   asyncHandler(async (req, res) => {
     const partId = requireIdParam(req.params.id);
     const fitmentId = requireIdParam(req.params.fitmentId, 'fitmentId');
@@ -335,6 +342,7 @@ partsRouter.get(
 
 partsRouter.post(
   '/parts/:id/cross-references',
+  requireRole('OWNER', 'MANAGER'),
   validate(partCrossReferenceCreateSchema),
   asyncHandler(async (req, res) => {
     const partId = requireIdParam(req.params.id);
@@ -360,6 +368,7 @@ partsRouter.post(
 
 partsRouter.delete(
   '/parts/:id/cross-references/:crossRefId',
+  requireRole('OWNER', 'MANAGER'),
   asyncHandler(async (req, res) => {
     const partId = requireIdParam(req.params.id);
     const crossRefId = requireIdParam(req.params.crossRefId, 'crossRefId');
@@ -397,6 +406,7 @@ partsRouter.get(
 
 partsRouter.post(
   '/parts/:id/suppliers',
+  requireRole('OWNER', 'MANAGER'),
   validate(supplierPartCreateSchema),
   asyncHandler(async (req, res) => {
     const partId = requireIdParam(req.params.id);
@@ -427,6 +437,7 @@ partsRouter.post(
 
 partsRouter.patch(
   '/parts/:id/suppliers/:supplierPartId',
+  requireRole('OWNER', 'MANAGER'),
   validate(supplierPartUpdateSchema),
   asyncHandler(async (req, res) => {
     const partId = requireIdParam(req.params.id);
@@ -455,6 +466,7 @@ partsRouter.patch(
 
 partsRouter.delete(
   '/parts/:id/suppliers/:supplierPartId',
+  requireRole('OWNER', 'MANAGER'),
   asyncHandler(async (req, res) => {
     const partId = requireIdParam(req.params.id);
     const supplierPartId = requireIdParam(req.params.supplierPartId, 'supplierPartId');
@@ -484,6 +496,10 @@ partsRouter.get(
     const part = await requirePart(partId);
     const { shopId } = getQuery<z.infer<typeof partFamilyQuerySchema>>(res);
     if (shopId !== undefined) {
+      // Stock/price projection is shop-scoped: a user may only see their own shop's numbers.
+      if (shopId !== req.user!.shopId) {
+        throw new ForbiddenError('You can only view stock for your own shop');
+      }
       await requireShop(shopId);
     }
 

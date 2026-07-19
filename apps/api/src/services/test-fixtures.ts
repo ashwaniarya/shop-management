@@ -1,6 +1,8 @@
-import type { Part, PrismaClient } from '@prisma/client';
+import type { Part, PrismaClient, User, UserRole } from '@prisma/client';
 
 import { normalizeNumber } from '../lib/normalize';
+import { prisma } from '../lib/prisma';
+import { hashPin, signToken } from './auth';
 
 export interface CatalogFixture {
   manufacturerId: number;
@@ -35,4 +37,29 @@ export async function createPartFixture(client: PrismaClient, input: PartFixture
       copyOfPartId: input.copyOfPartId,
     },
   });
+}
+
+export interface UserWithCredentialsInput {
+  shopId: number;
+  role: UserRole;
+  username: string;
+  pin: string;
+  name?: string;
+}
+
+export async function createUserWithCredentials(input: UserWithCredentialsInput): Promise<User> {
+  const passwordHash = await hashPin(input.pin);
+  return prisma.user.create({
+    data: {
+      shopId: input.shopId,
+      role: input.role,
+      name: input.name ?? input.username,
+      username: input.username,
+      passwordHash,
+    },
+  });
+}
+
+export function tokenFor(user: { id: number; shopId: number; role: UserRole }): string {
+  return signToken(user);
 }

@@ -1,4 +1,5 @@
 import { Prisma, RefType, StockTransactionType, UserRole } from '@prisma/client';
+import bcrypt from 'bcryptjs';
 
 import { normalizeNumber } from '../src/lib/normalize';
 import { prisma } from '../src/lib/prisma';
@@ -46,6 +47,15 @@ interface OpeningStockSpec {
   costPrice: number;
   sellingPrice: number;
   storageLocation: string;
+}
+
+// Cost 10 matches hashPin() in src/services/auth.ts. Hashed with bcryptjs
+// directly (not that module) so the seed stays self-contained and doesn't
+// pull in the auth service's fail-fast JWT_SECRET check.
+const SEED_PIN_HASH_COST = 10;
+
+async function hashSeedPin(pin: string): Promise<string> {
+  return bcrypt.hash(pin, SEED_PIN_HASH_COST);
 }
 
 async function main() {
@@ -517,6 +527,13 @@ async function main() {
         }),
       };
 
+      // Demo logins (POST /auth/login with { username, pin }), one per role:
+      //   owner    / 1111  — Main shop    · OWNER
+      //   manager  / 2222  — Main shop    · MANAGER
+      //   staff    / 3333  — Main shop    · STAFF
+      //   highway  / 4444  — Highway shop · OWNER
+      // highwaystaff/5555 also seeded (Highway · STAFF) for a second-user
+      // scenario at that shop; not one of the primary demo accounts above.
       const users = {
         mainOwner: await tx.user.create({
           data: {
@@ -524,7 +541,20 @@ async function main() {
             name: 'Suresh Arya',
             phone: '+91 98765 11111',
             email: 'suresh.arya@aryaautoparts.in',
+            username: 'owner',
+            passwordHash: await hashSeedPin('1111'),
             role: UserRole.OWNER,
+          },
+        }),
+        mainManager: await tx.user.create({
+          data: {
+            shopId: shops.main.id,
+            name: 'Vikram Joshi',
+            phone: '+91 98765 55555',
+            email: 'vikram.joshi@aryaautoparts.in',
+            username: 'manager',
+            passwordHash: await hashSeedPin('2222'),
+            role: UserRole.MANAGER,
           },
         }),
         mainStaff: await tx.user.create({
@@ -533,6 +563,8 @@ async function main() {
             name: 'Ramesh Kumar',
             phone: '+91 98765 22222',
             email: 'ramesh.kumar@aryaautoparts.in',
+            username: 'staff',
+            passwordHash: await hashSeedPin('3333'),
             role: UserRole.STAFF,
           },
         }),
@@ -542,6 +574,8 @@ async function main() {
             name: 'Meena Arya',
             phone: '+91 98765 33333',
             email: 'meena.arya@aryaautoparts.in',
+            username: 'highway',
+            passwordHash: await hashSeedPin('4444'),
             role: UserRole.OWNER,
           },
         }),
@@ -551,6 +585,8 @@ async function main() {
             name: 'Sanjay Patil',
             phone: '+91 98765 44444',
             email: 'sanjay.patil@aryaautoparts.in',
+            username: 'highwaystaff',
+            passwordHash: await hashSeedPin('5555'),
             role: UserRole.STAFF,
           },
         }),

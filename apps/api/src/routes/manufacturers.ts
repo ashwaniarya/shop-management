@@ -5,6 +5,7 @@ import { asyncHandler } from '../lib/asyncHandler';
 import { buildMeta, toSkipTake } from '../lib/pagination';
 import { requireIdParam } from '../lib/params';
 import { prisma } from '../lib/prisma';
+import { requireRole } from '../middleware/authorize';
 import { getQuery, validate, validateQuery } from '../middleware/validate';
 import { NotFoundError } from '../services/errors';
 
@@ -28,6 +29,7 @@ manufacturersRouter.get(
 
 manufacturersRouter.post(
   '/manufacturers',
+  requireRole('OWNER', 'MANAGER'),
   validate(manufacturerCreateSchema),
   asyncHandler(async (req, res) => {
     const manufacturer = await prisma.manufacturer.create({ data: req.body });
@@ -51,6 +53,7 @@ manufacturersRouter.get(
 
 manufacturersRouter.patch(
   '/manufacturers/:id',
+  requireRole('OWNER', 'MANAGER'),
   validate(manufacturerUpdateSchema),
   asyncHandler(async (req, res) => {
     const id = requireIdParam(req.params.id);
@@ -62,6 +65,7 @@ manufacturersRouter.patch(
 
 manufacturersRouter.delete(
   '/manufacturers/:id',
+  requireRole('OWNER', 'MANAGER'),
   asyncHandler(async (req, res) => {
     const id = requireIdParam(req.params.id);
     await prisma.manufacturer.update({ where: { id }, data: { isActive: false } });

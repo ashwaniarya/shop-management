@@ -22,6 +22,20 @@ export class ConflictError extends Error {
   }
 }
 
+export class UnauthorizedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'UnauthorizedError';
+  }
+}
+
+export class ForbiddenError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ForbiddenError';
+  }
+}
+
 export class InsufficientStockError extends DomainValidationError {
   readonly availableQuantity: number;
   readonly requestedQuantity: number;

@@ -6,13 +6,26 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { app } from '../app';
 import { prisma } from '../lib/prisma';
 import { appendStockTransaction } from '../services/stockLedger';
-import { createCatalogFixture, createPartFixture } from '../services/test-fixtures';
+import { createCatalogFixture, createPartFixture, createUserWithCredentials, tokenFor } from '../services/test-fixtures';
+
+// Every /api/v1/* request needs a Bearer token now; authApi wraps supertest with
+// the header. The caller is an OWNER in shopId, so requireSameShop passes and PUTs
+// (which also need OWNER/MANAGER) are allowed on the shop under test.
+let token = '';
+const authApi = {
+  get: (url: string) => request(app).get(url).set('Authorization', `Bearer ${token}`),
+  post: (url: string) => request(app).post(url).set('Authorization', `Bearer ${token}`),
+  patch: (url: string) => request(app).patch(url).set('Authorization', `Bearer ${token}`),
+  put: (url: string) => request(app).put(url).set('Authorization', `Bearer ${token}`),
+  delete: (url: string) => request(app).delete(url).set('Authorization', `Bearer ${token}`),
+};
 
 describe('inventory router', () => {
   const ts = Date.now();
   let manufacturerId: number;
   let categoryId: number;
   let shopId: number;
+  let otherShopId: number;
   const partIds: number[] = [];
   const userIds: number[] = [];
 
@@ -22,6 +35,17 @@ describe('inventory router', () => {
     categoryId = catalog.categoryId;
     const shop = await prisma.shop.create({ data: { name: `Inventory Test Shop ${ts}` } });
     shopId = shop.id;
+    const otherShop = await prisma.shop.create({ data: { name: `Inventory Test Other Shop ${ts}` } });
+    otherShopId = otherShop.id;
+
+    const owner = await createUserWithCredentials({
+      shopId,
+      role: UserRole.OWNER,
+      username: `inventory-owner-${ts}`,
+      pin: '1234',
+    });
+    userIds.push(owner.id);
+    token = tokenFor(owner);
   });
 
   afterAll(async () => {
@@ -30,6 +54,7 @@ describe('inventory router', () => {
     await prisma.user.deleteMany({ where: { id: { in: userIds } } });
     await prisma.part.deleteMany({ where: { id: { in: partIds } } });
     await prisma.shop.delete({ where: { id: shopId } });
+    await prisma.shop.delete({ where: { id: otherShopId } });
     await prisma.manufacturer.delete({ where: { id: manufacturerId } });
     await prisma.category.delete({ where: { id: categoryId } });
   });
@@ -43,7 +68,7 @@ describe('inventory router', () => {
     });
     partIds.push(part.id);
 
-    const createResponse = await request(app)
+    const createResponse = await authApi
       .put(`/api/v1/shops/${shopId}/inventory/${part.id}`)
       .send({ reorderLevel: 5, costPrice: 100, sellingPrice: 150, storageLocation: 'Rack A1' });
 
@@ -52,18 +77,18 @@ describe('inventory router', () => {
     expect(createResponse.body.reorderLevel).toBe(5);
     expect(createResponse.body.storageLocation).toBe('Rack A1');
 
-    const getResponse = await request(app).get(`/api/v1/shops/${shopId}/inventory/${part.id}`);
+    const getResponse = await authApi.get(`/api/v1/shops/${shopId}/inventory/${part.id}`);
     expect(getResponse.status).toBe(200);
     expect(getResponse.body).toEqual(createResponse.body);
 
-    const updateResponse = await request(app)
+    const updateResponse = await authApi
       .put(`/api/v1/shops/${shopId}/inventory/${part.id}`)
       .send({ reorderLevel: 8 });
     expect(updateResponse.status).toBe(200);
     expect(updateResponse.body.reorderLevel).toBe(8);
     expect(updateResponse.body.storageLocation).toBe('Rack A1');
 
-    const listResponse = await request(app).get(`/api/v1/shops/${shopId}/inventory`).query({ limit: 100 });
+    const listResponse = await authApi.get(`/api/v1/shops/${shopId}/inventory`).query({ limit: 100 });
     expect(listResponse.status).toBe(200);
     const row = listResponse.body.data.find((item: { partId: number }) => item.partId === part.id);
     expect(row).toBeDefined();
@@ -80,18 +105,21 @@ describe('inventory router', () => {
     });
     partIds.push(part.id);
 
-    const response = await request(app)
+    const response = await authApi
       .put(`/api/v1/shops/${shopId}/inventory/${part.id}`)
       .send({ reorderLevel: 5, quantityOnHand: 999 });
 
     expect(response.status).toBe(400);
     expect(response.body.error.code).toBe('VALIDATION_ERROR');
 
-    const afterResponse = await request(app).get(`/api/v1/shops/${shopId}/inventory/${part.id}`);
+    const afterResponse = await authApi.get(`/api/v1/shops/${shopId}/inventory/${part.id}`);
     expect(afterResponse.status).toBe(404);
   });
 
-  it('returns 404 NOT_FOUND when the shop does not exist', async () => {
+  // Was a 404 "nonexistent shop" case; requireSameShop now guards this route, so a
+  // PUT against any shop that isn't the caller's is a 403 before the handler's
+  // shop-existence check can run. otherShopId exists but isn't the caller's shop.
+  it('returns 403 FORBIDDEN when PUTting inventory for a shop the user is not in', async () => {
     const part = await createPartFixture(prisma, {
       sku: `INV-NOSHOP-SKU-${ts}`,
       manufacturerPartNumber: `INV-NOSHOP-MPN-${ts}`,
@@ -100,15 +128,15 @@ describe('inventory router', () => {
     });
     partIds.push(part.id);
 
-    const response = await request(app)
-      .put(`/api/v1/shops/999999999/inventory/${part.id}`)
+    const response = await authApi
+      .put(`/api/v1/shops/${otherShopId}/inventory/${part.id}`)
       .send({ reorderLevel: 1 });
 
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(403);
   });
 
   it('returns 404 NOT_FOUND when the part does not exist', async () => {
-    const response = await request(app).put(`/api/v1/shops/${shopId}/inventory/999999999`).send({ reorderLevel: 1 });
+    const response = await authApi.put(`/api/v1/shops/${shopId}/inventory/999999999`).send({ reorderLevel: 1 });
 
     expect(response.status).toBe(404);
   });
@@ -122,7 +150,7 @@ describe('inventory router', () => {
     });
     partIds.push(part.id);
 
-    const response = await request(app).get(`/api/v1/shops/${shopId}/inventory/${part.id}`);
+    const response = await authApi.get(`/api/v1/shops/${shopId}/inventory/${part.id}`);
 
     expect(response.status).toBe(404);
   });
@@ -140,7 +168,7 @@ describe('inventory router', () => {
       categoryId,
     });
     partIds.push(lowStockPart.id);
-    await request(app).put(`/api/v1/shops/${shopId}/inventory/${lowStockPart.id}`).send({ reorderLevel: 10 });
+    await authApi.put(`/api/v1/shops/${shopId}/inventory/${lowStockPart.id}`).send({ reorderLevel: 10 });
 
     const healthyStockPart = await createPartFixture(prisma, {
       sku: `INV-HEALTHY-SKU-${ts}`,
@@ -149,7 +177,7 @@ describe('inventory router', () => {
       categoryId,
     });
     partIds.push(healthyStockPart.id);
-    await request(app).put(`/api/v1/shops/${shopId}/inventory/${healthyStockPart.id}`).send({ reorderLevel: 2 });
+    await authApi.put(`/api/v1/shops/${shopId}/inventory/${healthyStockPart.id}`).send({ reorderLevel: 2 });
     await appendStockTransaction({
       shopId,
       partId: healthyStockPart.id,
@@ -159,7 +187,7 @@ describe('inventory router', () => {
       unitPrice: 10,
     });
 
-    const response = await request(app)
+    const response = await authApi
       .get(`/api/v1/shops/${shopId}/inventory`)
       .query({ belowReorder: 'true', limit: 100 });
 

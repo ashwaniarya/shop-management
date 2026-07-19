@@ -15,6 +15,8 @@ servers:
   - url: http://localhost:4000
     description: Local development
 tags:
+  - name: Auth
+    description: Authentication — obtaining and using a bearer token.
   - name: Manufacturers
     description: Parts manufacturers / brands (e.g. Bosch, Denso).
   - name: Categories
@@ -48,6 +50,60 @@ tags:
 security:
   - bearerAuth: []
 paths:
+  /api/v1/auth/login:
+    post:
+      operationId: login
+      summary: Log in with a username and PIN
+      description: >-
+        Exchanges a username and PIN for a bearer token. Public endpoint;
+        does not require an Authorization header.
+      tags: ["Auth"]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/auth/me:
+    get:
+      operationId: getCurrentUser
+      summary: Get the current authenticated user
+      tags: ["Auth"]
+      responses:
+        '200':
+          description: The authenticated user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthUser'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/auth/logout:
+    post:
+      operationId: logout
+      summary: Log out
+      description: >-
+        Stateless logout: the server does not track sessions, so this only
+        confirms the token was valid. The client is responsible for
+        discarding it.
+      tags: ["Auth"]
+      responses:
+        '204':
+          description: Logged out.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /api/v1/manufacturers:
     get:
       operationId: listManufacturers
@@ -1589,8 +1645,10 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: >-
-        Stub only. Every operation declares this security requirement for
-        forward compatibility, but auth enforcement is not implemented yet.
+        Obtain a token from `POST /auth/login` and send it as
+        `Authorization: Bearer <token>`. Every operation declares this
+        security requirement, but enforcement is being rolled out across
+        routes incrementally — not all of them require it yet.
 
   parameters:
     PageParam:
@@ -1646,6 +1704,12 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Missing, invalid, or expired credentials.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
 
   schemas:
     Error:
@@ -1676,6 +1740,37 @@ components:
         total:
           type: integer
           description: Total number of matching records across all pages.
+
+    LoginRequest:
+      type: object
+      required: [username, pin]
+      properties:
+        username:
+          type: string
+        pin:
+          type: string
+          description: 4–6 digit PIN.
+    LoginResponse:
+      type: object
+      required: [token, user]
+      properties:
+        token:
+          type: string
+        user:
+          $ref: '#/components/schemas/AuthUser'
+    AuthUser:
+      type: object
+      required: [id, shopId, name, role]
+      properties:
+        id:
+          type: integer
+        shopId:
+          type: integer
+        name:
+          type: string
+        role:
+          type: string
+          enum: [OWNER, MANAGER, STAFF]
 
     StockTransactionType:
       type: string
@@ -2524,11 +2619,9 @@ components:
           format: date-time
     StockTransactionCreate:
       type: object
-      required: [partId, userId, type, quantity]
+      required: [partId, type, quantity]
       properties:
         partId:
-          type: integer
-        userId:
           type: integer
         type:
           $ref: '#/components/schemas/StockTransactionType'
