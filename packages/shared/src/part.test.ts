@@ -37,6 +37,46 @@ describe('partCreateSchema', () => {
     });
     expect(result.unitOfMeasure).toBe('tub');
   });
+
+  it('leaves gradeId and copyOfPartId undefined when omitted', () => {
+    const result = partCreateSchema.parse({
+      sku: 'SKU-1',
+      manufacturerId: 1,
+      manufacturerPartNumber: 'MPN-1',
+      name: 'Test Part',
+      categoryId: 1,
+    });
+    expect(result.gradeId).toBeUndefined();
+    expect(result.copyOfPartId).toBeUndefined();
+  });
+
+  it('accepts numeric gradeId and copyOfPartId', () => {
+    const result = partCreateSchema.parse({
+      sku: 'SKU-1',
+      manufacturerId: 1,
+      manufacturerPartNumber: 'MPN-1',
+      name: 'Test Part',
+      categoryId: 1,
+      gradeId: 3,
+      copyOfPartId: 7,
+    });
+    expect(result.gradeId).toBe(3);
+    expect(result.copyOfPartId).toBe(7);
+  });
+
+  it('accepts explicit null gradeId and copyOfPartId', () => {
+    const result = partCreateSchema.parse({
+      sku: 'SKU-1',
+      manufacturerId: 1,
+      manufacturerPartNumber: 'MPN-1',
+      name: 'Test Part',
+      categoryId: 1,
+      gradeId: null,
+      copyOfPartId: null,
+    });
+    expect(result.gradeId).toBeNull();
+    expect(result.copyOfPartId).toBeNull();
+  });
 });
 
 describe('partUpdateSchema', () => {
@@ -58,5 +98,17 @@ describe('partUpdateSchema', () => {
   it('accepts an explicit null description', () => {
     const result = partUpdateSchema.safeParse({ description: null });
     expect(result.success).toBe(true);
+  });
+
+  it('accepts an explicit null gradeId and copyOfPartId to clear the links', () => {
+    const result = partUpdateSchema.parse({ gradeId: null, copyOfPartId: null });
+    expect(result.gradeId).toBeNull();
+    expect(result.copyOfPartId).toBeNull();
+  });
+
+  it('leaves gradeId and copyOfPartId undefined when omitted', () => {
+    const result = partUpdateSchema.parse({ name: 'Renamed Part' });
+    expect(result.gradeId).toBeUndefined();
+    expect(result.copyOfPartId).toBeUndefined();
   });
 });

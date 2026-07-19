@@ -33,6 +33,14 @@ export async function requireCategory(id: number) {
   return category;
 }
 
+export async function requirePartGrade(id: number) {
+  const partGrade = await prisma.partGrade.findUnique({ where: { id } });
+  if (!partGrade) {
+    throw new NotFoundError(`Part grade ${id} not found`);
+  }
+  return partGrade;
+}
+
 export async function requireVehicleClass(id: number) {
   const vehicleClass = await prisma.vehicleClass.findUnique({ where: { id } });
   if (!vehicleClass) {

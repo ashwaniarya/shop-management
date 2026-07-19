@@ -17,8 +17,10 @@ describe('parts router', () => {
   let manufacturerId: number;
   let otherManufacturerId: number;
   let categoryId: number;
+  let partGradeId: number;
   const categoryIds: number[] = [];
   const partIds: number[] = [];
+  const partGradeIds: number[] = [];
 
   beforeAll(async () => {
     const catalog = await createCatalogFixture(prisma, `Parts Test ${ts}`);
@@ -28,6 +30,10 @@ describe('parts router', () => {
 
     const otherManufacturer = await prisma.manufacturer.create({ data: { name: `Parts Test Other Mfr ${ts}` } });
     otherManufacturerId = otherManufacturer.id;
+
+    const partGrade = await prisma.partGrade.create({ data: { name: `Parts Test Grade ${ts}` } });
+    partGradeId = partGrade.id;
+    partGradeIds.push(partGradeId);
   });
 
   afterAll(async () => {
@@ -41,6 +47,7 @@ describe('parts router', () => {
     await prisma.partCrossReference.deleteMany({ where: { partId: { in: partIds } } });
     await prisma.partFitment.deleteMany({ where: { partId: { in: partIds } } });
     await prisma.part.deleteMany({ where: { id: { in: partIds } } });
+    await prisma.partGrade.deleteMany({ where: { id: { in: partGradeIds } } });
     await prisma.manufacturer.deleteMany({ where: { id: { in: [manufacturerId, otherManufacturerId] } } });
     await prisma.category.deleteMany({ where: { id: { in: categoryIds } } });
   });
@@ -122,6 +129,80 @@ describe('parts router', () => {
       await prisma.category.delete({ where: { id: reassignTargetCategory.id } });
     });
 
+    it('round-trips gradeId and copyOfPartId through create and the response', async () => {
+      const originalResponse = await request(app).post('/api/v1/parts').send({
+        sku: `SKU-FAM-ORIG-${ts}`,
+        manufacturerId,
+        manufacturerPartNumber: `MPN-FAM-ORIG-${ts}`,
+        name: `Family Original ${ts}`,
+        categoryId,
+      });
+      partIds.push(originalResponse.body.id);
+
+      const copyResponse = await request(app).post('/api/v1/parts').send({
+        sku: `SKU-FAM-COPY-${ts}`,
+        manufacturerId,
+        manufacturerPartNumber: `MPN-FAM-COPY-${ts}`,
+        name: `Family Copy ${ts}`,
+        categoryId,
+        gradeId: partGradeId,
+        copyOfPartId: originalResponse.body.id,
+      });
+
+      expect(copyResponse.status).toBe(201);
+      const created = partSchema.parse(copyResponse.body);
+      partIds.push(created.id);
+      expect(created.gradeId).toBe(partGradeId);
+      expect(created.copyOfPartId).toBe(originalResponse.body.id);
+
+      const getResponse = await request(app).get(`/api/v1/parts/${created.id}`);
+      const fetched = partSchema.parse(getResponse.body);
+      expect(fetched.gradeId).toBe(partGradeId);
+      expect(fetched.copyOfPartId).toBe(originalResponse.body.id);
+    });
+
+    it('sets and then clears gradeId and copyOfPartId via PATCH', async () => {
+      const originalResponse = await request(app).post('/api/v1/parts').send({
+        sku: `SKU-PATCHFAM-ORIG-${ts}`,
+        manufacturerId,
+        manufacturerPartNumber: `MPN-PATCHFAM-ORIG-${ts}`,
+        name: `Patch Family Original ${ts}`,
+        categoryId,
+      });
+      partIds.push(originalResponse.body.id);
+
+      const createResponse = await request(app).post('/api/v1/parts').send({
+        sku: `SKU-PATCHFAM-${ts}`,
+        manufacturerId,
+        manufacturerPartNumber: `MPN-PATCHFAM-${ts}`,
+        name: `Patch Family Part ${ts}`,
+        categoryId,
+      });
+      partIds.push(createResponse.body.id);
+      expect(createResponse.body.gradeId).toBeNull();
+      expect(createResponse.body.copyOfPartId).toBeNull();
+
+      const setResponse = await request(app)
+        .patch(`/api/v1/parts/${createResponse.body.id}`)
+        .send({ gradeId: partGradeId, copyOfPartId: originalResponse.body.id });
+      expect(setResponse.status).toBe(200);
+      expect(setResponse.body.gradeId).toBe(partGradeId);
+      expect(setResponse.body.copyOfPartId).toBe(originalResponse.body.id);
+
+      const unrelatedResponse = await request(app)
+        .patch(`/api/v1/parts/${createResponse.body.id}`)
+        .send({ name: `Patch Family Renamed ${ts}` });
+      expect(unrelatedResponse.body.gradeId).toBe(partGradeId);
+      expect(unrelatedResponse.body.copyOfPartId).toBe(originalResponse.body.id);
+
+      const clearResponse = await request(app)
+        .patch(`/api/v1/parts/${createResponse.body.id}`)
+        .send({ gradeId: null, copyOfPartId: null });
+      expect(clearResponse.status).toBe(200);
+      expect(clearResponse.body.gradeId).toBeNull();
+      expect(clearResponse.body.copyOfPartId).toBeNull();
+    });
+
     it('returns 400 VALIDATION_ERROR when required fields are missing', async () => {
       const response = await request(app).post('/api/v1/parts').send({ name: 'x' });
 
@@ -142,6 +223,19 @@ describe('parts router', () => {
         manufacturerPartNumber: `MPN-GHOST-${ts}`,
         name: 'Ghost',
         categoryId,
+      });
+
+      expect(response.status).toBe(404);
+    });
+
+    it('returns 404 NOT_FOUND when gradeId does not exist', async () => {
+      const response = await request(app).post('/api/v1/parts').send({
+        sku: `SKU-GHOST-GRADE-${ts}`,
+        manufacturerId,
+        manufacturerPartNumber: `MPN-GHOST-GRADE-${ts}`,
+        name: 'Ghost Grade',
+        categoryId,
+        gradeId: 999999999,
       });
 
       expect(response.status).toBe(404);
@@ -178,12 +272,83 @@ describe('parts router', () => {
     });
   });
 
+  describe('flat-family invariant', () => {
+    let familyOriginalId: number;
+    let familyCopyId: number;
+    let familyStandaloneId: number;
+
+    beforeAll(async () => {
+      const original = await createPartFixture(prisma, {
+        sku: `SKU-FLAT-ORIG-${ts}`,
+        manufacturerPartNumber: `MPN-FLAT-ORIG-${ts}`,
+        manufacturerId,
+        categoryId,
+      });
+      familyOriginalId = original.id;
+      partIds.push(familyOriginalId);
+
+      const copy = await createPartFixture(prisma, {
+        sku: `SKU-FLAT-COPY-${ts}`,
+        manufacturerPartNumber: `MPN-FLAT-COPY-${ts}`,
+        manufacturerId,
+        categoryId,
+        copyOfPartId: familyOriginalId,
+      });
+      familyCopyId = copy.id;
+      partIds.push(familyCopyId);
+
+      const standalone = await createPartFixture(prisma, {
+        sku: `SKU-FLAT-SOLO-${ts}`,
+        manufacturerPartNumber: `MPN-FLAT-SOLO-${ts}`,
+        manufacturerId,
+        categoryId,
+      });
+      familyStandaloneId = standalone.id;
+      partIds.push(familyStandaloneId);
+    });
+
+    it('POST linking to a part that is itself a copy returns 400 VALIDATION_ERROR naming the real original', async () => {
+      const response = await request(app).post('/api/v1/parts').send({
+        sku: `SKU-FLAT-CHAIN-${ts}`,
+        manufacturerId,
+        manufacturerPartNumber: `MPN-FLAT-CHAIN-${ts}`,
+        name: 'Chain Attempt',
+        categoryId,
+        copyOfPartId: familyCopyId,
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error.code).toBe('VALIDATION_ERROR');
+      expect(response.body.error.message).toContain(`part ${familyOriginalId}`);
+    });
+
+    it('PATCH turning a part that has copies into a copy returns 400 VALIDATION_ERROR', async () => {
+      const response = await request(app)
+        .patch(`/api/v1/parts/${familyOriginalId}`)
+        .send({ copyOfPartId: familyStandaloneId });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('PATCH linking a part to itself returns 400 VALIDATION_ERROR', async () => {
+      const response = await request(app)
+        .patch(`/api/v1/parts/${familyStandaloneId}`)
+        .send({ copyOfPartId: familyStandaloneId });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error.code).toBe('VALIDATION_ERROR');
+    });
+  });
+
   describe('list filters', () => {
     let searchablePartId: number;
     let inactivePartId: number;
     let otherCategoryId: number;
     let otherCategoryPartId: number;
     let otherManufacturerPartId: number;
+    let filterGradeId: number;
+    let gradedPartId: number;
 
     beforeAll(async () => {
       const searchable = await createPartFixture(prisma, {
@@ -226,6 +391,19 @@ describe('parts router', () => {
       });
       otherManufacturerPartId = otherManufacturerPart.id;
       partIds.push(otherManufacturerPartId);
+
+      const filterGrade = await prisma.partGrade.create({ data: { name: `Parts Filter Grade ${ts}` } });
+      filterGradeId = filterGrade.id;
+      partGradeIds.push(filterGradeId);
+      const gradedPart = await createPartFixture(prisma, {
+        sku: `SKU-GRADED-${ts}`,
+        manufacturerPartNumber: `MPN-GRADED-${ts}`,
+        manufacturerId,
+        categoryId,
+        gradeId: filterGradeId,
+      });
+      gradedPartId = gradedPart.id;
+      partIds.push(gradedPartId);
     });
 
     it('filters by free-text q against the part name', async () => {
@@ -244,6 +422,12 @@ describe('parts router', () => {
       const response = await request(app).get('/api/v1/parts').query({ manufacturerId: otherManufacturerId });
 
       expect(response.body.data.map((part: { id: number }) => part.id)).toEqual([otherManufacturerPartId]);
+    });
+
+    it('filters by gradeId', async () => {
+      const response = await request(app).get('/api/v1/parts').query({ gradeId: filterGradeId });
+
+      expect(response.body.data.map((part: { id: number }) => part.id)).toEqual([gradedPartId]);
     });
 
     it('filters by isActive=false', async () => {

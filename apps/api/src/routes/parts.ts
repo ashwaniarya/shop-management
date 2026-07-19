@@ -11,7 +11,7 @@ import {
 import { Router } from 'express';
 import { z } from 'zod';
 
-import { requireCategory, requireManufacturer, requirePart } from '../lib/assertExists';
+import { requireCategory, requireManufacturer, requirePart, requirePartGrade } from '../lib/assertExists';
 import { asyncHandler } from '../lib/asyncHandler';
 import { normalizeNumber } from '../lib/normalize';
 import { buildMeta, toSkipTake } from '../lib/pagination';
@@ -28,6 +28,7 @@ import {
 import { getQuery, validate, validateQuery } from '../middleware/validate';
 import { NotFoundError } from '../services/errors';
 import { buildFitmentWhere, validateFitmentInput } from '../services/fitment';
+import { validateCopyOfTarget } from '../services/partFamily';
 import { searchPartsByNumber } from '../services/partSearch';
 
 export const partsRouter = Router();
@@ -38,6 +39,7 @@ const listPartsQuerySchema = paginationQuerySchema.extend({
   q: z.string().optional(),
   categoryId: z.coerce.number().int().optional(),
   manufacturerId: z.coerce.number().int().optional(),
+  gradeId: z.coerce.number().int().optional(),
   isActive: booleanQueryParam.optional(),
   vehicleClassId: z.coerce.number().int().optional(),
   vehicleMakeId: z.coerce.number().int().optional(),
@@ -68,6 +70,7 @@ partsRouter.get(
         : {}),
       ...(query.categoryId !== undefined ? { categoryId: query.categoryId } : {}),
       ...(query.manufacturerId !== undefined ? { manufacturerId: query.manufacturerId } : {}),
+      ...(query.gradeId !== undefined ? { gradeId: query.gradeId } : {}),
       ...(query.isActive !== undefined ? { isActive: query.isActive } : {}),
       ...(fitmentWhere ?? {}),
     };
@@ -87,6 +90,12 @@ partsRouter.post(
   asyncHandler(async (req, res) => {
     await requireManufacturer(req.body.manufacturerId);
     await requireCategory(req.body.categoryId);
+    if (req.body.gradeId != null) {
+      await requirePartGrade(req.body.gradeId);
+    }
+    if (req.body.copyOfPartId != null) {
+      await validateCopyOfTarget(null, req.body.copyOfPartId);
+    }
 
     const part = await prisma.part.create({
       data: {
@@ -204,6 +213,12 @@ partsRouter.patch(
     }
     if (req.body.categoryId !== undefined) {
       await requireCategory(req.body.categoryId);
+    }
+    if (req.body.gradeId !== undefined && req.body.gradeId !== null) {
+      await requirePartGrade(req.body.gradeId);
+    }
+    if (req.body.copyOfPartId !== undefined && req.body.copyOfPartId !== null) {
+      await validateCopyOfTarget(id, req.body.copyOfPartId);
     }
 
     // Unchecked (not the plain PartUpdateInput): the body carries raw scalar FKs

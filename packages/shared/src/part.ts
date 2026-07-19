@@ -10,6 +10,8 @@ export const partSchema = z.object({
   description: z.string().nullable(),
   unitOfMeasure: z.string(),
   mrp: z.number().nullable(),
+  gradeId: z.number().int().nullable(),
+  copyOfPartId: z.number().int().nullable(),
   isActive: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -25,6 +27,8 @@ export const partCreateSchema = z.object({
   description: z.string().nullable().optional(),
   unitOfMeasure: z.string().default('piece'),
   mrp: z.number().nullable().optional(),
+  gradeId: z.number().int().nullable().optional(),
+  copyOfPartId: z.number().int().nullable().optional(),
 });
 export type PartCreate = z.infer<typeof partCreateSchema>;
 

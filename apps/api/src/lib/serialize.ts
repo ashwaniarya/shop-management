@@ -22,6 +22,8 @@ export function serializePart(part: Part) {
     description: part.description,
     unitOfMeasure: part.unitOfMeasure,
     mrp: toNumberOrNull(part.mrp),
+    gradeId: part.gradeId,
+    copyOfPartId: part.copyOfPartId,
     isActive: part.isActive,
     createdAt: part.createdAt,
     updatedAt: part.updatedAt,
