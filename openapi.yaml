@@ -2451,7 +2451,7 @@ components:
 
     User:
       type: object
-      required: [id, shopId, name, phone, email, role, isActive, createdAt, updatedAt]
+      required: [id, shopId, name, phone, email, username, role, isActive, createdAt, updatedAt]
       properties:
         id:
           type: integer
@@ -2463,6 +2463,9 @@ components:
           type: [string, "null"]
         email:
           type: [string, "null"]
+        username:
+          type: [string, "null"]
+          description: Login username. Null if this user has no login provisioned.
         role:
           type: string
           enum: [OWNER, MANAGER, STAFF]
@@ -2484,6 +2487,14 @@ components:
           type: [string, "null"]
         email:
           type: [string, "null"]
+        username:
+          type: string
+          minLength: 3
+          description: Sets up a login for this user. Omit to leave the user without one.
+        pin:
+          type: string
+          pattern: '^\d{4,6}$'
+          description: 4–6 digit login PIN, hashed server-side. Write-only — never returned.
         role:
           type: string
           enum: [OWNER, MANAGER, STAFF]
@@ -2496,6 +2507,14 @@ components:
           type: [string, "null"]
         email:
           type: [string, "null"]
+        username:
+          type: string
+          minLength: 3
+          description: Sets up a login for this user. Omit to leave unchanged.
+        pin:
+          type: string
+          pattern: '^\d{4,6}$'
+          description: 4–6 digit login PIN, hashed server-side. Omit to leave unchanged. Write-only — never returned.
         role:
           type: string
           enum: [OWNER, MANAGER, STAFF]

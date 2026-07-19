@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ApiError, del, get, listShops, post } from './api';
+import { ApiError, decideUnauthorizedAction, del, get, listShops, post } from './api';
 
 function mockFetchOnce(response: { ok: boolean; status: number; json?: () => Promise<unknown> }) {
   const fetchMock = vi.fn().mockResolvedValue({
@@ -12,6 +12,22 @@ function mockFetchOnce(response: { ok: boolean; status: number; json?: () => Pro
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
 }
+
+describe('decideUnauthorizedAction', () => {
+  it('does not touch the token or redirect on a failed login (401 = wrong PIN)', () => {
+    expect(decideUnauthorizedAction('POST', '/auth/login', '/login')).toEqual({ clearToken: false, redirect: false });
+    expect(decideUnauthorizedAction('POST', '/auth/login', '/parts')).toEqual({ clearToken: false, redirect: false });
+  });
+
+  it('clears the token and redirects on a 401 from any other route', () => {
+    expect(decideUnauthorizedAction('GET', '/parts', '/parts')).toEqual({ clearToken: true, redirect: true });
+    expect(decideUnauthorizedAction('GET', '/auth/me', '/inventory')).toEqual({ clearToken: true, redirect: true });
+  });
+
+  it('clears the token but does not redirect when already on /login (avoids a reload loop)', () => {
+    expect(decideUnauthorizedAction('GET', '/auth/me', '/login')).toEqual({ clearToken: true, redirect: false });
+  });
+});
 
 describe('api client', () => {
   afterEach(() => {

@@ -9,9 +9,8 @@ import { FormError } from '@/components/ui/FormError';
 import { Input } from '@/components/ui/Input';
 import { LoadingBlock } from '@/components/ui/LoadingRow';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
-import { Select } from '@/components/ui/Select';
+import { useAuth } from '@/context/AuthContext';
 import { useAsync } from '@/hooks/useAsync';
-import { useShopUsersLookup } from '@/hooks/useShopUsersLookup';
 import { useZodSubmit } from '@/hooks/useZodSubmit';
 import { ApiError, createStockTransaction, getInventoryItem, upsertInventoryItem } from '@/lib/api';
 import { formatQuantity } from '@/lib/format';
@@ -40,12 +39,15 @@ export function StockSection({ partId, shopId }: StockSectionProps) {
     [shopId, partId],
   );
   const { data: inventoryItem, isLoading, error, retry: refetchInventory } = useAsync(inventoryFetcher);
-  const { users } = useShopUsersLookup(shopId);
+  const { user } = useAuth();
+  const isStaff = user?.role === 'STAFF';
+  const movementTypeOptions = isStaff
+    ? MOVEMENT_TYPE_OPTIONS.filter((option) => option.value === 'SALE')
+    : MOVEMENT_TYPE_OPTIONS;
 
   const [movementType, setMovementType] = useState<StockTransactionType>('SALE');
   const [quantityText, setQuantityText] = useState('');
   const [unitPriceText, setUnitPriceText] = useState('');
-  const [userId, setUserId] = useState<number | ''>('');
   const [movementNotes, setMovementNotes] = useState('');
 
   const {
@@ -66,7 +68,6 @@ export function StockSection({ partId, shopId }: StockSectionProps) {
     event.preventDefault();
     runMovement({
       partId,
-      userId: userId === '' ? undefined : userId,
       type: movementType,
       quantity: quantityText.trim() === '' ? Number.NaN : Number(quantityText),
       unitPrice: unitPriceText.trim() === '' ? undefined : Number(unitPriceText),
@@ -114,7 +115,7 @@ export function StockSection({ partId, shopId }: StockSectionProps) {
             <span className="text-xs font-medium text-ink-300">Type</span>
             <SegmentedControl
               label="Movement type"
-              options={MOVEMENT_TYPE_OPTIONS}
+              options={movementTypeOptions}
               value={movementType}
               onChange={setMovementType}
             />
@@ -146,20 +147,6 @@ export function StockSection({ partId, shopId }: StockSectionProps) {
             min={0}
             className="font-mono tabular-nums"
           />
-          <Select
-            label="Staff member"
-            required
-            value={userId}
-            onChange={(event) => setUserId(event.target.value === '' ? '' : Number(event.target.value))}
-            error={movementFieldErrors.userId}
-          >
-            <option value="">Select…</option>
-            {users.map((user) => (
-              <option key={user.id} value={user.id}>
-                {user.name}
-              </option>
-            ))}
-          </Select>
           <Input
             label="Notes"
             placeholder="Optional"

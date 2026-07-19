@@ -9,12 +9,15 @@ import { PartFormDialog } from '@/components/parts/PartFormDialog';
 import { PartSearchPanel } from '@/components/parts/PartSearchPanel';
 import { PartsTable } from '@/components/parts/PartsTable';
 import { Button } from '@/components/ui/Button';
+import { useAuth } from '@/context/AuthContext';
 import { useCategoriesLookup } from '@/hooks/useCategoriesLookup';
 import { useManufacturersLookup } from '@/hooks/useManufacturersLookup';
 import { usePartGradesLookup } from '@/hooks/usePartGradesLookup';
 
 export default function PartsPage() {
   const router = useRouter();
+  const { user } = useAuth();
+  const canCreateParts = user?.role === 'OWNER' || user?.role === 'MANAGER';
   const [filters, setFilters] = useState<PartsFiltersValue>(INITIAL_PARTS_FILTERS);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const { categories, categoriesById } = useCategoriesLookup();
@@ -28,17 +31,21 @@ export default function PartsPage() {
           <h1 className="font-display text-2xl font-bold tracking-wide text-ink-50 uppercase">Parts catalog</h1>
           <p className="mt-1 text-sm text-ink-500">Search by number, or browse and filter the full catalog.</p>
         </div>
-        <div className="hidden md:block">
-          <Button variant="primary" onClick={() => setIsCreateDialogOpen(true)}>
-            New part
-          </Button>
-        </div>
-        <Link
-          href="/parts/new"
-          className="inline-flex h-9 items-center gap-1.5 rounded-sm bg-accent-500 px-3.5 text-sm font-medium whitespace-nowrap text-ink-950 transition-colors hover:bg-accent-400 active:bg-accent-600 md:hidden"
-        >
-          New part
-        </Link>
+        {canCreateParts ? (
+          <>
+            <div className="hidden md:block">
+              <Button variant="primary" onClick={() => setIsCreateDialogOpen(true)}>
+                New part
+              </Button>
+            </div>
+            <Link
+              href="/parts/new"
+              className="inline-flex h-9 items-center gap-1.5 rounded-sm bg-accent-500 px-3.5 text-sm font-medium whitespace-nowrap text-ink-950 transition-colors hover:bg-accent-400 active:bg-accent-600 md:hidden"
+            >
+              New part
+            </Link>
+          </>
+        ) : null}
       </div>
 
       <PartSearchPanel partGrades={partGrades} partGradesById={partGradesById} />

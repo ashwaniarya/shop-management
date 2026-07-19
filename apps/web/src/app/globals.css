@@ -73,6 +73,14 @@ body {
   background-size: 28px 28px;
 }
 
+.bg-login-glow {
+  background-image: radial-gradient(
+    circle at 50% 32%,
+    color-mix(in oklab, var(--color-accent-500) 12%, transparent),
+    transparent 60%
+  );
+}
+
 .scrollbar-instrument {
   scrollbar-width: thin;
   scrollbar-color: var(--color-ink-700) transparent;

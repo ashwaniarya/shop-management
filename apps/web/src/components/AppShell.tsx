@@ -5,7 +5,8 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
 import { MobileNav } from '@/components/MobileNav';
 import { Sidebar } from '@/components/Sidebar';
-import { ShopSelector } from '@/components/ShopSelector';
+import { ShopIndicator } from '@/components/ShopIndicator';
+import { UserBadge } from '@/components/UserBadge';
 
 function HamburgerIcon() {
   return (
@@ -49,7 +50,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               Parts counter workstation
             </p>
           </div>
-          <ShopSelector />
+          <div className="flex items-center gap-3 sm:gap-4">
+            <ShopIndicator />
+            <div aria-hidden="true" className="hidden h-6 w-px bg-ink-800 sm:block" />
+            <UserBadge />
+          </div>
         </header>
         <main className="bg-graticule flex-1 p-4 sm:p-6">{children}</main>
       </div>

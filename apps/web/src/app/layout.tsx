@@ -1,8 +1,8 @@
 import type { Metadata, Viewport } from 'next';
 import { Big_Shoulders, IBM_Plex_Sans, JetBrains_Mono } from 'next/font/google';
 
-import { AppShell } from '@/components/AppShell';
-import { ShopProvider } from '@/context/ShopContext';
+import { AppGate } from '@/components/AppGate';
+import { AuthProvider } from '@/context/AuthContext';
 
 import './globals.css';
 
@@ -39,9 +39,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en" className={`${sansFont.variable} ${monoFont.variable} ${displayFont.variable}`}>
       <body className="antialiased">
-        <ShopProvider>
-          <AppShell>{children}</AppShell>
-        </ShopProvider>
+        <AuthProvider>
+          <AppGate>{children}</AppGate>
+        </AuthProvider>
       </body>
     </html>
   );

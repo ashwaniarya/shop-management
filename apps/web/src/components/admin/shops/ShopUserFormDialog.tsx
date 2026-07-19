@@ -25,6 +25,11 @@ function nullableOrTrimmed(value: string): string | null {
   return trimmed === '' ? null : trimmed;
 }
 
+function undefinedOrTrimmed(value: string): string | undefined {
+  const trimmed = value.trim();
+  return trimmed === '' ? undefined : trimmed;
+}
+
 export function ShopUserFormDialog({ shopId, user, isOpen, onClose, onSaved }: ShopUserFormDialogProps) {
   return (
     <Dialog isOpen={isOpen} onClose={onClose} title={user ? `Edit user — ${user.name}` : 'Add user'}>
@@ -49,6 +54,8 @@ function ShopUserForm({
   const [name, setName] = useState(user?.name ?? '');
   const [phone, setPhone] = useState(user?.phone ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
+  const [username, setUsername] = useState(user?.username ?? '');
+  const [pin, setPin] = useState('');
   const [role, setRole] = useState<UserRole>(user?.role ?? 'STAFF');
 
   const closeAfterSave = () => {
@@ -69,6 +76,8 @@ function ShopUserForm({
       name: name.trim(),
       phone: nullableOrTrimmed(phone),
       email: nullableOrTrimmed(email),
+      username: undefinedOrTrimmed(username),
+      pin: pin === '' ? undefined : pin,
       role,
     });
   }
@@ -101,6 +110,37 @@ function ShopUserForm({
           </option>
         ))}
       </Select>
+
+      <div className="border-t border-ink-800 pt-3">
+        <p className="mb-3 text-xs font-medium tracking-wide text-ink-300 uppercase">Login credentials</p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Input
+            label="Username"
+            required={!user}
+            placeholder={user ? 'None set' : undefined}
+            autoComplete="off"
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            error={fieldErrors.username}
+            className="font-mono"
+          />
+          <Input
+            label="PIN"
+            type="password"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            autoComplete="off"
+            maxLength={6}
+            placeholder={user ? 'Unchanged' : 'Optional'}
+            hint={user ? '4–6 digits — leave blank to keep the current PIN' : '4–6 digits — leave blank to set up login later'}
+            className="text-center font-mono tracking-[0.4em]"
+            value={pin}
+            onChange={(event) => setPin(event.target.value.replace(/\D/g, ''))}
+            error={fieldErrors.pin}
+          />
+        </div>
+      </div>
+
       <FormActions submitLabel={user ? 'Save changes' : 'Add user'} isSubmitting={isSubmitting} error={submitError} onCancel={onClose} />
     </form>
   );

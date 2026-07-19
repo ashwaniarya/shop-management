@@ -6,8 +6,10 @@ import { asyncHandler } from '../lib/asyncHandler';
 import { buildMeta, toSkipTake } from '../lib/pagination';
 import { requireIdParam } from '../lib/params';
 import { prisma } from '../lib/prisma';
+import { serializeUser } from '../lib/serialize';
 import { requireRole, requireSameShop } from '../middleware/authorize';
 import { getQuery, validate, validateQuery } from '../middleware/validate';
+import { hashPin } from '../services/auth';
 import { NotFoundError } from '../services/errors';
 
 export const shopsRouter = Router();
@@ -99,7 +101,7 @@ shopsRouter.get(
       prisma.user.count({ where: { shopId } }),
     ]);
 
-    res.json({ data, meta: buildMeta(query, total) });
+    res.json({ data: data.map(serializeUser), meta: buildMeta(query, total) });
   }),
 );
 
@@ -112,9 +114,18 @@ shopsRouter.post(
     const shopId = requireIdParam(req.params.shopId, 'shopId');
     await requireShop(shopId);
 
-    const user = await prisma.user.create({ data: { ...req.body, shopId } });
+    // pin is never a Prisma column — it's hashed into passwordHash here and must
+    // never reach prisma.user.create as-is.
+    const { pin, ...userData } = req.body;
+    const user = await prisma.user.create({
+      data: {
+        ...userData,
+        shopId,
+        ...(pin !== undefined ? { passwordHash: await hashPin(pin) } : {}),
+      },
+    });
 
-    res.status(201).set('Location', `/api/v1/shops/${shopId}/users/${user.id}`).json(user);
+    res.status(201).set('Location', `/api/v1/shops/${shopId}/users/${user.id}`).json(serializeUser(user));
   }),
 );
 
@@ -126,7 +137,7 @@ shopsRouter.get(
     const id = requireIdParam(req.params.id);
     const user = await requireShopUser(shopId, id);
 
-    res.json(user);
+    res.json(serializeUser(user));
   }),
 );
 
@@ -140,9 +151,16 @@ shopsRouter.patch(
     const id = requireIdParam(req.params.id);
     await requireShopUser(shopId, id);
 
-    const user = await prisma.user.update({ where: { id }, data: req.body });
+    const { pin, ...userData } = req.body;
+    const user = await prisma.user.update({
+      where: { id },
+      data: {
+        ...userData,
+        ...(pin !== undefined ? { passwordHash: await hashPin(pin) } : {}),
+      },
+    });
 
-    res.json(user);
+    res.json(serializeUser(user));
   }),
 );
 

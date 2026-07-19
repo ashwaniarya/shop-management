@@ -1,4 +1,12 @@
-import type { InventoryItem, Part, PartCrossReference, PartFitment, StockTransaction, SupplierPart } from '@prisma/client';
+import type {
+  InventoryItem,
+  Part,
+  PartCrossReference,
+  PartFitment,
+  StockTransaction,
+  SupplierPart,
+  User,
+} from '@prisma/client';
 
 interface DecimalLike {
   toNumber(): number;
@@ -56,6 +64,23 @@ export function serializeStockTransaction(transaction: StockTransaction) {
     unitPrice: toNumberOrNull(transaction.unitPrice),
     notes: transaction.notes,
     createdAt: transaction.createdAt,
+  };
+}
+
+// Excludes passwordHash on purpose — this is the DTO boundary the login-round-trip
+// crosses, and the hash must never leave the API.
+export function serializeUser(user: User) {
+  return {
+    id: user.id,
+    shopId: user.shopId,
+    name: user.name,
+    phone: user.phone,
+    email: user.email,
+    username: user.username,
+    role: user.role,
+    isActive: user.isActive,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
   };
 }
 

@@ -151,5 +151,40 @@ describe('shops router', () => {
       const response = await authApi.get(`/api/v1/shops/${shopId}/users/${otherShopUser.id}`);
       expect(response.status).toBe(404);
     });
+
+    it('provisions a login: creating a user with username+pin returns 201 with username and no passwordHash, and that user can then obtain a token from /auth/login', async () => {
+      const username = `shops-provisioned-${ts}`;
+      const pin = '4321';
+
+      const createResponse = await authApi
+        .post(`/api/v1/shops/${shopId}/users`)
+        .send({ name: `Provisioned Staff ${ts}`, role: 'STAFF', username, pin });
+
+      expect(createResponse.status).toBe(201);
+      const created = userSchema.parse(createResponse.body);
+      expect(created.username).toBe(username);
+      expect(createResponse.body).not.toHaveProperty('passwordHash');
+      expect(createResponse.body).not.toHaveProperty('pin');
+
+      // Proves the hash round-trips: the pin sent on create is the pin this user logs in with.
+      const loginResponse = await request(app).post('/api/v1/auth/login').send({ username, pin });
+      expect(loginResponse.status).toBe(200);
+      expect(typeof loginResponse.body.token).toBe('string');
+      expect(loginResponse.body.user.id).toBe(created.id);
+    });
+
+    it('returns 409 CONFLICT when creating a user with a username that is already taken', async () => {
+      const username = `shops-dup-${ts}`;
+
+      const firstResponse = await authApi
+        .post(`/api/v1/shops/${shopId}/users`)
+        .send({ name: `First ${ts}`, role: 'STAFF', username, pin: '1111' });
+      expect(firstResponse.status).toBe(201);
+
+      const secondResponse = await authApi
+        .post(`/api/v1/shops/${shopId}/users`)
+        .send({ name: `Second ${ts}`, role: 'STAFF', username, pin: '2222' });
+      expect(secondResponse.status).toBe(409);
+    });
   });
 });

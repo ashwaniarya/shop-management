@@ -12,6 +12,7 @@ import { FormError } from '@/components/ui/FormError';
 import { Input } from '@/components/ui/Input';
 import { LoadingBlock } from '@/components/ui/LoadingRow';
 import { SectionHeading } from '@/components/ui/SectionHeading';
+import { useAuth } from '@/context/AuthContext';
 import { useShop } from '@/context/ShopContext';
 import { useCategoriesLookup } from '@/hooks/useCategoriesLookup';
 import { useManufacturersLookup } from '@/hooks/useManufacturersLookup';
@@ -49,6 +50,7 @@ function BackArrowIcon() {
 
 export default function NewPartPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const { shops, isLoading, selectedShopId } = useShop();
   const { manufacturers } = useManufacturersLookup();
   const { categories } = useCategoriesLookup();
@@ -94,6 +96,27 @@ export default function NewPartPage() {
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     run(buildPartFormPayload(values));
+  }
+
+  // Defense-in-depth: the API already 403s a STAFF create, and the nav/Parts-page
+  // triggers are hidden for STAFF, but this page is still directly reachable by URL.
+  if (user?.role === 'STAFF') {
+    return (
+      <div className="mx-auto max-w-lg py-16">
+        <EmptyState
+          title="Adding parts is restricted"
+          description="Only owners and managers can add new parts to the catalog. Ask one of them to add it for you."
+          action={
+            <Link
+              href="/parts"
+              className="inline-flex h-9 items-center rounded-sm bg-accent-500 px-3.5 text-sm font-medium text-ink-950 transition-colors hover:bg-accent-400 active:bg-accent-600"
+            >
+              Back to Parts catalog
+            </Link>
+          }
+        />
+      </div>
+    );
   }
 
   if (createdPart) {

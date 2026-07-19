@@ -1,4 +1,7 @@
+'use client';
+
 import { NavLink } from '@/components/NavLink';
+import { useAuth } from '@/context/AuthContext';
 
 const PRIMARY_LINKS = [
   { href: '/', label: 'Dashboard' },
@@ -13,8 +16,9 @@ const CATALOG_LINKS = [
   { href: '/manufacturers', label: 'Manufacturers' },
   { href: '/categories', label: 'Categories' },
   { href: '/grades', label: 'Grades' },
-  { href: '/shops', label: 'Shops' },
 ];
+
+const SHOPS_LINK = { href: '/shops', label: 'Shops' };
 
 function BrandMark() {
   return (
@@ -31,6 +35,10 @@ function BrandMark() {
 }
 
 export function Sidebar() {
+  const { user } = useAuth();
+  const canSeeCatalog = user?.role === 'OWNER' || user?.role === 'MANAGER';
+  const canSeeShops = user?.role === 'OWNER';
+
   return (
     <nav className="flex w-56 shrink-0 flex-col border-r border-ink-800 bg-ink-900 px-6 py-5">
       <div className="mb-8 flex items-center gap-2.5 px-3">
@@ -48,18 +56,25 @@ export function Sidebar() {
         ))}
       </ul>
 
-      <div className="mt-6 border-t border-ink-800 pt-6">
-        <div className="mb-2 px-3 font-mono text-[10px] font-medium tracking-[0.18em] text-ink-500 uppercase">
-          Catalog data
+      {canSeeCatalog ? (
+        <div className="mt-6 border-t border-ink-800 pt-6">
+          <div className="mb-2 px-3 font-mono text-[10px] font-medium tracking-[0.18em] text-ink-500 uppercase">
+            Catalog data
+          </div>
+          <ul className="space-y-0.5">
+            {CATALOG_LINKS.map((link) => (
+              <li key={link.href}>
+                <NavLink href={link.href}>{link.label}</NavLink>
+              </li>
+            ))}
+            {canSeeShops ? (
+              <li>
+                <NavLink href={SHOPS_LINK.href}>{SHOPS_LINK.label}</NavLink>
+              </li>
+            ) : null}
+          </ul>
         </div>
-        <ul className="space-y-0.5">
-          {CATALOG_LINKS.map((link) => (
-            <li key={link.href}>
-              <NavLink href={link.href}>{link.label}</NavLink>
-            </li>
-          ))}
-        </ul>
-      </div>
+      ) : null}
     </nav>
   );
 }

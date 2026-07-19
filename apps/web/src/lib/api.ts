@@ -1,9 +1,11 @@
 import type {
+  AuthUser,
   Category,
   CategoryCreate,
   CategoryUpdate,
   InventoryItem,
   InventoryItemUpdate,
+  LoginResponse,
   Manufacturer,
   ManufacturerCreate,
   ManufacturerUpdate,
@@ -43,6 +45,8 @@ import type {
   VehicleModelCreate,
   VehicleModelUpdate,
 } from '@shop/shared';
+
+import { clearAuthToken, getAuthToken } from '@/lib/authToken';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 const API_PREFIX = '/api/v1';
@@ -103,6 +107,47 @@ interface RequestOptions {
   body?: unknown;
 }
 
+const LOGIN_PATH = '/auth/login';
+
+function buildRequestHeaders(hasBody: boolean): HeadersInit | undefined {
+  const headers: Record<string, string> = {};
+  if (hasBody) {
+    headers['Content-Type'] = 'application/json';
+  }
+  const token = getAuthToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return Object.keys(headers).length > 0 ? headers : undefined;
+}
+
+// A 401 means the stored token is missing/expired/invalid, except on the login
+// call itself (a 401 there just means "wrong username/PIN" and must surface as
+// a normal ApiError to the login form). Everywhere else, drop the dead token and
+// hard-redirect to /login — skipping the redirect when already there avoids a
+// reload loop if some in-flight request 401s right as the login page mounts.
+export function decideUnauthorizedAction(
+  method: string,
+  path: string,
+  currentPathname: string,
+): { clearToken: boolean; redirect: boolean } {
+  if (method === 'POST' && path === LOGIN_PATH) {
+    return { clearToken: false, redirect: false };
+  }
+  return { clearToken: true, redirect: currentPathname !== '/login' };
+}
+
+function handleUnauthorizedResponse(method: string, path: string): void {
+  const currentPathname = typeof window !== 'undefined' ? window.location.pathname : '/login';
+  const { clearToken, redirect } = decideUnauthorizedAction(method, path, currentPathname);
+  if (clearToken) {
+    clearAuthToken();
+  }
+  if (redirect && typeof window !== 'undefined') {
+    window.location.href = '/login';
+  }
+}
+
 async function request<T>(method: string, path: string, options: RequestOptions = {}): Promise<T> {
   const url = `${API_BASE_URL}${API_PREFIX}${path}${buildQueryString(options.query)}`;
 
@@ -110,7 +155,7 @@ async function request<T>(method: string, path: string, options: RequestOptions 
   try {
     response = await fetch(url, {
       method,
-      headers: options.body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+      headers: buildRequestHeaders(options.body !== undefined),
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
     });
   } catch (cause) {
@@ -131,6 +176,9 @@ async function request<T>(method: string, path: string, options: RequestOptions 
       code: 'UNKNOWN_ERROR',
       message: response.statusText || `Request failed with status ${response.status}`,
     };
+    if (response.status === 401) {
+      handleUnauthorizedResponse(method, path);
+    }
     throw new ApiError(response.status, errorPayload);
   }
 
@@ -208,6 +256,20 @@ export interface TransactionSummary {
   sales: { count: number; quantity: number; revenue: number };
   purchases: { count: number; quantity: number; cost: number };
   adjustments: { count: number; quantity: number };
+}
+
+// --- Auth --------------------------------------------------------------------------
+
+export function login(username: string, pin: string): Promise<LoginResponse> {
+  return post<LoginResponse>('/auth/login', { username, pin });
+}
+
+export function getMe(): Promise<AuthUser> {
+  return get<AuthUser>('/auth/me');
+}
+
+export function logout(): Promise<void> {
+  return post<void>('/auth/logout');
 }
 
 // --- Parts -----------------------------------------------------------------------
