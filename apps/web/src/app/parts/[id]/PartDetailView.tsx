@@ -81,6 +81,7 @@ export function PartDetailView({ partId }: { partId: number }) {
         part={part}
         manufacturers={manufacturers}
         categories={categories}
+        partGrades={partGrades}
         isOpen={isEditDialogOpen}
         onClose={() => setIsEditDialogOpen(false)}
         onSaved={refetchPart}

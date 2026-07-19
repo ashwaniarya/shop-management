@@ -23,8 +23,7 @@ interface PartFormDialogProps {
   part: Part | null;
   manufacturers: Manufacturer[];
   categories: Category[];
-  // Optional until the part-detail edit call site (a parallel change) threads grades in.
-  partGrades?: PartGrade[];
+  partGrades: PartGrade[];
   isOpen: boolean;
   onClose: () => void;
   onSaved: (part: Part) => void;
@@ -46,7 +45,7 @@ export function PartFormDialog({
   part,
   manufacturers,
   categories,
-  partGrades = [],
+  partGrades,
   isOpen,
   onClose,
   onSaved,
