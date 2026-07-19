@@ -795,8 +795,7 @@ paths:
         Responds 409 if a part with this `sku`, or this `manufacturerId` +
         `manufacturerPartNumber` pair, already exists. Responds 400 when
         `copyOfPartId` names a part that is itself a copy (copy families are
-        one level deep), when the part already has copies linked to it, or on
-        a self-link; cross-manufacturer copy links are allowed.
+        one level deep). Cross-manufacturer copy links are allowed.
       requestBody:
         required: true
         content:
@@ -818,6 +817,8 @@ paths:
                 $ref: '#/components/schemas/Part'
         '400':
           $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
   /api/v1/parts/search:

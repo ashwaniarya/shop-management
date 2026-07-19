@@ -214,10 +214,10 @@ partsRouter.patch(
     if (req.body.categoryId !== undefined) {
       await requireCategory(req.body.categoryId);
     }
-    if (req.body.gradeId !== undefined && req.body.gradeId !== null) {
+    if (req.body.gradeId != null) {
       await requirePartGrade(req.body.gradeId);
     }
-    if (req.body.copyOfPartId !== undefined && req.body.copyOfPartId !== null) {
+    if (req.body.copyOfPartId != null) {
       await validateCopyOfTarget(id, req.body.copyOfPartId);
     }
 
