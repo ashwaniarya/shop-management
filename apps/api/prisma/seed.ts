@@ -613,11 +613,11 @@ async function main() {
           throw new Error(`openingStock references unknown SKU ${stock.partSku}`);
         }
 
-        const inventoryItem = await tx.inventoryItem.create({
+        await tx.inventoryItem.create({
           data: {
             shopId: stock.shopId,
             partId,
-            quantityOnHand: 0,
+            quantityOnHand: stock.quantity,
             reorderLevel: stock.reorderLevel,
             costPrice: stock.costPrice,
             sellingPrice: stock.sellingPrice,
@@ -634,11 +634,6 @@ async function main() {
             quantity: stock.quantity,
             unitPrice: stock.costPrice,
           },
-        });
-
-        await tx.inventoryItem.update({
-          where: { id: inventoryItem.id },
-          data: { quantityOnHand: stock.quantity },
         });
       }
     },
