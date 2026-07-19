@@ -28,6 +28,8 @@ interface PartSpec {
   name: string;
   description: string;
   categoryId: number;
+  gradeId?: number;
+  copyOfSku?: string;
   unitOfMeasure?: string;
   mrp: number;
   fitments: PartFitmentSpec[];
@@ -57,6 +59,7 @@ async function main() {
       await tx.partFitment.deleteMany();
       await tx.user.deleteMany();
       await tx.part.deleteMany();
+      await tx.partGrade.deleteMany();
       await tx.vehicleModel.deleteMany();
       await tx.vehicleMake.deleteMany();
       await tx.vehicleClass.deleteMany();
@@ -166,6 +169,12 @@ async function main() {
         }),
       };
 
+      const partGrades = {
+        original: await tx.partGrade.create({ data: { name: 'Original', displayOrder: 1 } }),
+        firstCopy: await tx.partGrade.create({ data: { name: '1st Copy', displayOrder: 2 } }),
+        secondCopy: await tx.partGrade.create({ data: { name: '2nd Copy', displayOrder: 3 } }),
+      };
+
       const suppliers = {
         shreeBalaji: await tx.supplier.create({
           data: {
@@ -197,6 +206,7 @@ async function main() {
           name: 'Starter Motor - Mahindra 575 DI',
           description: '12V starter motor for Mahindra 575 DI tractor engines.',
           categoryId: categories.starterMotors.id,
+          gradeId: partGrades.original.id,
           mrp: 4200,
           fitments: [
             {
@@ -244,6 +254,7 @@ async function main() {
           name: 'Battery 12V 88Ah - Mahindra Tractor Range',
           description: 'Maintenance-free 12V 88Ah battery fitting the full Mahindra tractor range.',
           categoryId: categories.batteries.id,
+          gradeId: partGrades.original.id,
           mrp: 6800,
           fitments: [{ vehicleClassId: vehicleClasses.tractor.id, vehicleMakeId: vehicleMakes.mahindra.id }],
           crossReferences: [
@@ -357,6 +368,7 @@ async function main() {
           name: 'Headlamp Bulb H4 - Maruti Suzuki Swift',
           description: 'H4 halogen headlamp bulb for the Maruti Suzuki Swift.',
           categoryId: categories.lighting.id,
+          gradeId: partGrades.original.id,
           mrp: 240,
           fitments: [
             {
@@ -374,11 +386,63 @@ async function main() {
             { supplierId: suppliers.nationalAutoSpares.id, supplierPartNumber: 'NAS-HLB-SWFT', isPreferred: false },
           ],
         },
+        {
+          sku: 'STM-LTV-575DI-C1',
+          manufacturerId: manufacturers.lucasTvs.id,
+          manufacturerPartNumber: 'LTV-ST-5750-C1',
+          name: 'Starter Motor - Mahindra 575 DI (1st Copy)',
+          description: '1st-copy grade 12V starter motor for Mahindra 575 DI tractor engines.',
+          categoryId: categories.starterMotors.id,
+          gradeId: partGrades.firstCopy.id,
+          copyOfSku: 'STM-BSH-575DI',
+          mrp: 2900,
+          fitments: [
+            {
+              vehicleClassId: vehicleClasses.tractor.id,
+              vehicleMakeId: vehicleMakes.mahindra.id,
+              vehicleModelId: vehicleModels.mahindra575DI.id,
+            },
+          ],
+          crossReferences: [{ refType: RefType.OEM, refNumber: 'MHD-STR-575DI-OE', refBrand: 'Mahindra' }],
+          supplierParts: [
+            { supplierId: suppliers.shreeBalaji.id, supplierPartNumber: 'SBD-STM-5750-C1', isPreferred: true },
+          ],
+        },
+        {
+          sku: 'STM-MCO-575DI-C2',
+          manufacturerId: manufacturers.mico.id,
+          manufacturerPartNumber: 'MCO-ST-5750-C2',
+          name: 'Starter Motor - Mahindra 575 DI (2nd Copy)',
+          description: '2nd-copy grade 12V starter motor for Mahindra 575 DI tractor engines.',
+          categoryId: categories.starterMotors.id,
+          gradeId: partGrades.secondCopy.id,
+          copyOfSku: 'STM-BSH-575DI',
+          mrp: 2200,
+          fitments: [
+            {
+              vehicleClassId: vehicleClasses.tractor.id,
+              vehicleMakeId: vehicleMakes.mahindra.id,
+              vehicleModelId: vehicleModels.mahindra575DI.id,
+            },
+          ],
+          crossReferences: [],
+          supplierParts: [
+            { supplierId: suppliers.nationalAutoSpares.id, supplierPartNumber: 'NAS-STM-5750-C2', isPreferred: true },
+          ],
+        },
       ];
 
       const partIdBySku: Record<string, number> = {};
 
       for (const spec of partSpecs) {
+        let copyOfPartId: number | undefined;
+        if (spec.copyOfSku !== undefined) {
+          copyOfPartId = partIdBySku[spec.copyOfSku];
+          if (copyOfPartId === undefined) {
+            throw new Error(`partSpec ${spec.sku} references unknown copyOfSku ${spec.copyOfSku}`);
+          }
+        }
+
         const part = await tx.part.create({
           data: {
             sku: spec.sku,
@@ -389,6 +453,8 @@ async function main() {
             name: spec.name,
             description: spec.description,
             categoryId: spec.categoryId,
+            gradeId: spec.gradeId,
+            copyOfPartId,
             unitOfMeasure: spec.unitOfMeasure,
             mrp: spec.mrp,
           },
@@ -507,6 +573,26 @@ async function main() {
         },
         {
           shopId: shops.main.id,
+          partSku: 'STM-LTV-575DI-C1',
+          purchasedByUserId: users.mainOwner.id,
+          quantity: 8,
+          reorderLevel: 4,
+          costPrice: 2100,
+          sellingPrice: 2600,
+          storageLocation: 'Rack A3',
+        },
+        {
+          shopId: shops.main.id,
+          partSku: 'STM-MCO-575DI-C2',
+          purchasedByUserId: users.mainOwner.id,
+          quantity: 12,
+          reorderLevel: 6,
+          costPrice: 1500,
+          sellingPrice: 1950,
+          storageLocation: 'Rack A4',
+        },
+        {
+          shopId: shops.main.id,
           partSku: 'BAT-EXD-88AH',
           purchasedByUserId: users.mainOwner.id,
           quantity: 10,
@@ -574,6 +660,16 @@ async function main() {
           costPrice: 3250,
           sellingPrice: 3900,
           storageLocation: 'Rack A1',
+        },
+        {
+          shopId: shops.highway.id,
+          partSku: 'STM-LTV-575DI-C1',
+          purchasedByUserId: users.highwayOwner.id,
+          quantity: 5,
+          reorderLevel: 3,
+          costPrice: 2150,
+          sellingPrice: 2650,
+          storageLocation: 'Rack A2',
         },
         {
           shopId: shops.highway.id,
@@ -667,6 +763,7 @@ async function main() {
     vehicleModelCount,
     manufacturerCount,
     categoryCount,
+    partGradeCount,
     supplierCount,
     partCount,
     crossReferenceCount,
@@ -681,6 +778,7 @@ async function main() {
     prisma.vehicleModel.count(),
     prisma.manufacturer.count(),
     prisma.category.count(),
+    prisma.partGrade.count(),
     prisma.supplier.count(),
     prisma.part.count(),
     prisma.partCrossReference.count(),
@@ -694,7 +792,7 @@ async function main() {
   console.log(
     `Seed complete: vehicleClasses=${vehicleClassCount} vehicleMakes=${vehicleMakeCount} ` +
       `vehicleModels=${vehicleModelCount} manufacturers=${manufacturerCount} categories=${categoryCount} ` +
-      `suppliers=${supplierCount} parts=${partCount} crossReferences=${crossReferenceCount} ` +
+      `partGrades=${partGradeCount} suppliers=${supplierCount} parts=${partCount} crossReferences=${crossReferenceCount} ` +
       `supplierParts=${supplierPartCount} shops=${shopCount} users=${userCount} ` +
       `inventoryItems=${inventoryItemCount} stockTransactions=${stockTransactionCount}. ` +
       `Ledger invariant OK for ${inventoryItems.length} item(s).`,
