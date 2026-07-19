@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { CrossReferencesSection } from '@/components/partDetail/CrossReferencesSection';
 import { FitmentsSection } from '@/components/partDetail/FitmentsSection';
+import { GradesSection } from '@/components/partDetail/GradesSection';
 import { MovementHistorySection } from '@/components/partDetail/MovementHistorySection';
 import { PartHeaderCard } from '@/components/partDetail/PartHeaderCard';
 import { StockSection } from '@/components/partDetail/StockSection';
@@ -16,12 +17,14 @@ import { useShop } from '@/context/ShopContext';
 import { useAsync } from '@/hooks/useAsync';
 import { useCategoriesLookup } from '@/hooks/useCategoriesLookup';
 import { useManufacturersLookup } from '@/hooks/useManufacturersLookup';
+import { usePartGradesLookup } from '@/hooks/usePartGradesLookup';
 import { getPart360 } from '@/lib/api';
 
-type TabKey = 'fitments' | 'crossReferences' | 'suppliers' | 'stock' | 'history';
+type TabKey = 'fitments' | 'grades' | 'crossReferences' | 'suppliers' | 'stock' | 'history';
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'fitments', label: 'Fitments' },
+  { key: 'grades', label: 'Grades' },
   { key: 'crossReferences', label: 'Cross-references' },
   { key: 'suppliers', label: 'Suppliers' },
   { key: 'stock', label: 'Stock' },
@@ -37,6 +40,7 @@ export function PartDetailView({ partId }: { partId: number }) {
   const { data: part, isLoading, error, retry: refetchPart } = useAsync(fetcher);
   const { categories, categoriesById } = useCategoriesLookup();
   const { manufacturers, manufacturersById } = useManufacturersLookup();
+  const { partGrades, partGradesById } = usePartGradesLookup();
   const { selectedShopId } = useShop();
 
   const [activeTab, setActiveTab] = useState<TabKey>('fitments');
@@ -68,6 +72,8 @@ export function PartDetailView({ partId }: { partId: number }) {
         part={part}
         manufacturerName={manufacturersById.get(part.manufacturerId)?.name ?? `#${part.manufacturerId}`}
         categoryName={categoriesById.get(part.categoryId)?.name ?? `#${part.categoryId}`}
+        grade={part.gradeId === null ? null : (partGradesById.get(part.gradeId) ?? null)}
+        partGrades={partGrades}
         onEdit={() => setIsEditDialogOpen(true)}
       />
 
@@ -103,6 +109,8 @@ export function PartDetailView({ partId }: { partId: number }) {
         <div role="tabpanel" className="pt-5">
           {activeTab === 'fitments' ? (
             <FitmentsSection partId={partId} fitments={part.fitments ?? []} onMutated={refetchPart} />
+          ) : activeTab === 'grades' ? (
+            <GradesSection partId={partId} shopId={selectedShopId} partGrades={partGrades} />
           ) : activeTab === 'crossReferences' ? (
             <CrossReferencesSection partId={partId} crossReferences={part.crossReferences ?? []} onMutated={refetchPart} />
           ) : activeTab === 'suppliers' ? (

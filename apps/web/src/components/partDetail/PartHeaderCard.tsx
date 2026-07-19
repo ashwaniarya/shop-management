@@ -1,16 +1,19 @@
 import { PartActiveBadge } from '@/components/PartActiveBadge';
+import { PartGradeBadge } from '@/components/PartGradeBadge';
 import { Button } from '@/components/ui/Button';
 import { formatCurrency } from '@/lib/format';
-import type { Part } from '@shop/shared';
+import type { Part, PartGrade } from '@shop/shared';
 
 interface PartHeaderCardProps {
   part: Part;
   manufacturerName: string;
   categoryName: string;
+  grade: PartGrade | null;
+  partGrades: PartGrade[];
   onEdit?: () => void;
 }
 
-export function PartHeaderCard({ part, manufacturerName, categoryName, onEdit }: PartHeaderCardProps) {
+export function PartHeaderCard({ part, manufacturerName, categoryName, grade, partGrades, onEdit }: PartHeaderCardProps) {
   return (
     <div className="rounded-md border border-ink-800 bg-ink-900 p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -43,6 +46,12 @@ export function PartHeaderCard({ part, manufacturerName, categoryName, onEdit }:
         <div>
           <dt className="text-[11px] tracking-[0.1em] text-ink-500 uppercase">Unit</dt>
           <dd className="mt-0.5 text-sm text-ink-100">{part.unitOfMeasure}</dd>
+        </div>
+        <div>
+          <dt className="text-[11px] tracking-[0.1em] text-ink-500 uppercase">Grade</dt>
+          <dd className="mt-0.5 text-sm text-ink-100">
+            {grade ? <PartGradeBadge grade={grade} partGrades={partGrades} /> : '—'}
+          </dd>
         </div>
       </dl>
       {part.description ? <p className="mt-4 text-sm text-ink-400">{part.description}</p> : null}
