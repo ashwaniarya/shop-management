@@ -109,3 +109,13 @@ body {
 .animate-skeleton {
   animation: pulse-skeleton 1.4s ease-in-out infinite;
 }
+
+/* The app is dark end-to-end (body text defaults to near-white ink-100), but a
+   printed receipt has to be legible on paper. The receipt card carries its own
+   explicit dark-on-light colors regardless of screen vs. print, so this only
+   needs to stop the page's dark background itself from printing behind it. */
+@media print {
+  body {
+    background-color: #fff;
+  }
+}

@@ -5,6 +5,8 @@ import { useAuth } from '@/context/AuthContext';
 
 const PRIMARY_LINKS = [
   { href: '/', label: 'Dashboard' },
+  { href: '/sell', label: 'Sell' },
+  { href: '/invoices', label: 'Invoices' },
   { href: '/parts', label: 'Parts' },
   { href: '/inventory', label: 'Inventory' },
   { href: '/transactions', label: 'Ledger' },

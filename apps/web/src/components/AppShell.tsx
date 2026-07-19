@@ -27,14 +27,14 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen">
-      <div className="hidden md:flex">
+      <div className="hidden md:flex print:hidden">
         <Sidebar />
       </div>
 
       <MobileNav isOpen={isDrawerOpen} onClose={closeDrawer} />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-ink-800 bg-ink-900 px-4 py-3 sm:px-6">
+        <header className="flex items-center justify-between border-b border-ink-800 bg-ink-900 px-4 py-3 sm:px-6 print:hidden">
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -56,7 +56,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <UserBadge />
           </div>
         </header>
-        <main className="bg-graticule flex-1 p-4 sm:p-6">{children}</main>
+        <main className="bg-graticule flex-1 p-4 sm:p-6 print:bg-white print:bg-none print:p-0">{children}</main>
       </div>
     </div>
   );

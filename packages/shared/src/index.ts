@@ -16,3 +16,4 @@ export * from './user';
 export * from './auth';
 export * from './inventoryItem';
 export * from './stockTransaction';
+export * from './invoice';

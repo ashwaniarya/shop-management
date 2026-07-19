@@ -11,6 +11,7 @@ import { errorHandler } from './middleware/errorHandler';
 import { authRouter } from './routes/auth';
 import { categoriesRouter } from './routes/categories';
 import { inventoryRouter } from './routes/inventory';
+import { invoicesRouter } from './routes/invoices';
 import { manufacturersRouter } from './routes/manufacturers';
 import { partGradesRouter } from './routes/partGrades';
 import { partsRouter } from './routes/parts';
@@ -57,6 +58,7 @@ app.use('/api/v1', partsRouter);
 app.use('/api/v1', shopsRouter);
 app.use('/api/v1', inventoryRouter);
 app.use('/api/v1', stockTransactionsRouter);
+app.use('/api/v1', invoicesRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: { code: 'NOT_FOUND', message: `Route ${req.method} ${req.path} not found` } });

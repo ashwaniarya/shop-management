@@ -5,6 +5,9 @@ import type {
   CategoryUpdate,
   InventoryItem,
   InventoryItemUpdate,
+  InvoiceCreate,
+  InvoiceDetail,
+  InvoiceListItem,
   LoginResponse,
   Manufacturer,
   ManufacturerCreate,
@@ -592,4 +595,24 @@ export function getTransactionsSummary(
   params?: TransactionsSummaryParams,
 ): Promise<TransactionSummary> {
   return get<TransactionSummary>(`/shops/${shopId}/stock-transactions/summary`, params);
+}
+
+// --- Invoices --------------------------------------------------------------------------
+
+export interface ListInvoicesParams extends PaginationParams {
+  from?: string;
+  to?: string;
+  q?: string;
+}
+
+export function listInvoices(shopId: number, params?: ListInvoicesParams): Promise<Paginated<InvoiceListItem>> {
+  return list<InvoiceListItem>(`/shops/${shopId}/invoices`, params);
+}
+
+export function createInvoice(shopId: number, body: InvoiceCreate): Promise<InvoiceDetail> {
+  return post<InvoiceDetail>(`/shops/${shopId}/invoices`, body);
+}
+
+export function getInvoice(shopId: number, id: number): Promise<InvoiceDetail> {
+  return get<InvoiceDetail>(`/shops/${shopId}/invoices/${id}`);
 }

@@ -55,49 +55,73 @@ export async function appendStockTransaction(
   const signedQuantity =
     type === StockTransactionType.SALE ? new Prisma.Decimal(quantity).negated() : new Prisma.Decimal(quantity);
 
-  return prisma.$transaction(async (tx) => {
-    // Seed the row so the guarded update always has a target, and so the
-    // unique (shopId, partId) index — not a lost INSERT — arbitrates a
-    // concurrent first-ever transaction for this part.
-    await tx.inventoryItem.upsert({
-      where: { shopId_partId: { shopId, partId } },
-      create: { shopId, partId, quantityOnHand: 0 },
-      update: {},
-    });
+  return prisma.$transaction((tx) =>
+    applyStockDelta(tx, { shopId, partId, userId, type, signedQuantity, unitPrice, notes }),
+  );
+}
 
-    // Atomic guard + mutation: under READ COMMITTED the WHERE re-evaluates
-    // against the latest committed quantity, so a concurrent sale cannot
-    // pass the non-negative check on a stale read.
-    const applied = await tx.inventoryItem.updateMany({
-      where: { shopId, partId, quantityOnHand: { gte: signedQuantity.negated() } },
-      data: { quantityOnHand: { increment: signedQuantity } },
-    });
+export interface ApplyStockDeltaInput {
+  shopId: number;
+  partId: number;
+  userId: number;
+  type: StockTransactionType;
+  signedQuantity: Prisma.Decimal;
+  unitPrice?: Prisma.Decimal | number | null;
+  notes?: string | null;
+}
 
-    const inventoryItem = await tx.inventoryItem.findUniqueOrThrow({
-      where: { shopId_partId: { shopId, partId } },
-    });
+// Tx-scoped core of a ledger append: seeds the inventory row, applies the
+// guarded delta, and records the SALE/PURCHASE/ADJUSTMENT row — all against the
+// caller's `tx` so it composes into a larger atomic unit (e.g. invoice checkout,
+// where an oversell on any line must roll back the whole basket). The caller
+// owns the sign (SALE passes a negated quantity) and all pre-tx validation.
+export async function applyStockDelta(
+  tx: Prisma.TransactionClient,
+  input: ApplyStockDeltaInput,
+): Promise<AppendStockTransactionResult> {
+  const { shopId, partId, userId, type, signedQuantity, unitPrice, notes } = input;
 
-    if (applied.count === 0) {
-      throw new InsufficientStockError(
-        inventoryItem.quantityOnHand.toNumber(),
-        signedQuantity.abs().toNumber(),
-      );
-    }
-
-    const transaction = await tx.stockTransaction.create({
-      data: {
-        shopId,
-        partId,
-        userId,
-        type,
-        quantity: signedQuantity,
-        unitPrice: unitPrice ?? null,
-        notes: notes ?? null,
-      },
-    });
-
-    return { transaction, inventoryItem };
+  // Seed the row so the guarded update always has a target, and so the
+  // unique (shopId, partId) index — not a lost INSERT — arbitrates a
+  // concurrent first-ever transaction for this part.
+  await tx.inventoryItem.upsert({
+    where: { shopId_partId: { shopId, partId } },
+    create: { shopId, partId, quantityOnHand: 0 },
+    update: {},
   });
+
+  // Atomic guard + mutation: under READ COMMITTED the WHERE re-evaluates
+  // against the latest committed quantity, so a concurrent sale cannot
+  // pass the non-negative check on a stale read.
+  const applied = await tx.inventoryItem.updateMany({
+    where: { shopId, partId, quantityOnHand: { gte: signedQuantity.negated() } },
+    data: { quantityOnHand: { increment: signedQuantity } },
+  });
+
+  const inventoryItem = await tx.inventoryItem.findUniqueOrThrow({
+    where: { shopId_partId: { shopId, partId } },
+  });
+
+  if (applied.count === 0) {
+    throw new InsufficientStockError(
+      inventoryItem.quantityOnHand.toNumber(),
+      signedQuantity.abs().toNumber(),
+    );
+  }
+
+  const transaction = await tx.stockTransaction.create({
+    data: {
+      shopId,
+      partId,
+      userId,
+      type,
+      quantity: signedQuantity,
+      unitPrice: unitPrice ?? null,
+      notes: notes ?? null,
+    },
+  });
+
+  return { transaction, inventoryItem };
 }
 
 export interface TransactionsSummaryRange {

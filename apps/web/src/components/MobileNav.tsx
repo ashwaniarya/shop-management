@@ -70,7 +70,7 @@ export function MobileNav({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
       <div
         aria-hidden="true"
         onClick={onClose}
-        className={`fixed inset-0 z-40 bg-ink-950/70 transition-opacity duration-200 md:hidden ${
+        className={`fixed inset-0 z-40 bg-ink-950/70 transition-opacity duration-200 md:hidden print:hidden ${
           isOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
         }`}
       />
@@ -84,7 +84,7 @@ export function MobileNav({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
         inert={!isOpen}
         tabIndex={-1}
         onClick={handlePanelClick}
-        className={`fixed inset-y-0 left-0 z-50 flex outline-none transition-transform duration-200 ease-out md:hidden ${
+        className={`fixed inset-y-0 left-0 z-50 flex outline-none transition-transform duration-200 ease-out md:hidden print:hidden ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >

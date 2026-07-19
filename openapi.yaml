@@ -47,6 +47,8 @@ tags:
     description: Per-shop stock levels and pricing for parts.
   - name: Stock Transactions
     description: Append-only per-shop stock ledger.
+  - name: Invoices
+    description: Point-of-sale checkout — multi-line sales invoices with a gapless per-shop numbering sequence.
 security:
   - bearerAuth: []
 paths:
@@ -1638,6 +1640,106 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/shops/{shopId}/invoices:
+    parameters:
+      - $ref: '#/components/parameters/ShopIdParam'
+    get:
+      operationId: listInvoices
+      summary: List invoices for a shop
+      description: >-
+        Returns invoices sorted newest first, each with an `itemCount` of how
+        many lines it has. Use `q` to search `invoiceNumber` or
+        `customerName`, and `from`/`to` to bound `createdAt`.
+      tags: ["Invoices"]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: from
+          in: query
+          required: false
+          description: Only include invoices at or after this date-time.
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          description: Only include invoices at or before this date-time.
+          schema:
+            type: string
+            format: date-time
+        - name: q
+          in: query
+          required: false
+          description: Free-text search over `invoiceNumber` and `customerName`.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: A page of invoices, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceListItemListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      operationId: createInvoice
+      summary: Check out a multi-line sales invoice
+      description: >-
+        Atomically records one negated SALE stock transaction per line,
+        decrements inventory, and allocates the next gapless invoice number
+        for the shop. The whole basket rolls back together if any line would
+        oversell or fails validation — insufficient stock surfaces as 400,
+        same as validation errors. Any authenticated user for this shop may
+        check out a sale; there is no role restriction.
+      tags: ["Invoices"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvoiceCreate'
+      responses:
+        '201':
+          description: The created invoice, with its lines and the salesman/shop header details.
+          headers:
+            Location:
+              description: URL of the created invoice.
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceDetail'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/shops/{shopId}/invoices/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ShopIdParam'
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      operationId: getInvoice
+      summary: Get an invoice by id
+      description: >-
+        404s if `id` names an invoice belonging to a different shop — an
+        invoice id never resolves outside its own shop.
+      tags: ["Invoices"]
+      responses:
+        '200':
+          description: The invoice, with its lines and the salesman/shop header details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2778,3 +2880,122 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PartFamilyMember'
+
+    Invoice:
+      type: object
+      required: [id, shopId, userId, invoiceNumber, customerName, customerPhone, notes, total, createdAt]
+      properties:
+        id:
+          type: integer
+        shopId:
+          type: integer
+        userId:
+          type: integer
+        invoiceNumber:
+          type: string
+        customerName:
+          type: [string, "null"]
+        customerPhone:
+          type: [string, "null"]
+        notes:
+          type: [string, "null"]
+        total:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+    InvoiceLine:
+      type: object
+      required: [id, invoiceId, partId, stockTransactionId, partSku, partName, quantity, unitPrice, lineTotal]
+      properties:
+        id:
+          type: integer
+        invoiceId:
+          type: integer
+        partId:
+          type: integer
+        stockTransactionId:
+          type: integer
+        partSku:
+          type: string
+        partName:
+          type: string
+        quantity:
+          type: number
+        unitPrice:
+          type: number
+        lineTotal:
+          type: number
+    InvoiceLineCreate:
+      type: object
+      required: [partId, quantity, unitPrice]
+      properties:
+        partId:
+          type: integer
+        quantity:
+          type: number
+          description: Must be positive.
+        unitPrice:
+          type: number
+          description: Must be non-negative.
+    InvoiceCreate:
+      type: object
+      required: [lines]
+      properties:
+        customerName:
+          type: [string, "null"]
+        customerPhone:
+          type: [string, "null"]
+        notes:
+          type: [string, "null"]
+        lines:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/InvoiceLineCreate'
+    InvoiceListItem:
+      description: An invoice with its line count, for display in a list.
+      allOf:
+        - $ref: '#/components/schemas/Invoice'
+        - type: object
+          required: [itemCount]
+          properties:
+            itemCount:
+              type: integer
+    InvoiceListItemListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/InvoiceListItem'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    InvoiceDetail:
+      description: >-
+        An invoice with its lines and the shop/salesman header details
+        needed to print a receipt.
+      allOf:
+        - $ref: '#/components/schemas/Invoice'
+        - type: object
+          required: [lines, salesmanName, shop]
+          properties:
+            lines:
+              type: array
+              items:
+                $ref: '#/components/schemas/InvoiceLine'
+            salesmanName:
+              type: string
+            shop:
+              type: object
+              required: [name, address, phone, gstin]
+              properties:
+                name:
+                  type: string
+                address:
+                  type: [string, "null"]
+                phone:
+                  type: [string, "null"]
+                gstin:
+                  type: [string, "null"]

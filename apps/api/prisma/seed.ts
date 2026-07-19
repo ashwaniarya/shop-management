@@ -1,3 +1,4 @@
+import { formatInvoiceNumber } from '@shop/shared';
 import { Prisma, RefType, StockTransactionType, UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
@@ -49,6 +50,30 @@ interface OpeningStockSpec {
   storageLocation: string;
 }
 
+interface SampleInvoiceLineSpec {
+  partSku: string;
+  quantity: number;
+  unitPrice: number;
+}
+
+interface SampleInvoiceSpec {
+  shopId: number;
+  soldByUserId: number;
+  customerName: string;
+  customerPhone: string;
+  lines: SampleInvoiceLineSpec[];
+}
+
+interface InvoiceLineRow {
+  partId: number;
+  stockTransactionId: number;
+  partSku: string;
+  partName: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+}
+
 // Cost 10 matches hashPin() in src/services/auth.ts. Hashed with bcryptjs
 // directly (not that module) so the seed stays self-contained and doesn't
 // pull in the auth service's fail-fast JWT_SECRET check.
@@ -62,6 +87,9 @@ async function main() {
   await prisma.$transaction(
     async (tx) => {
       // FK-safe delete order: children before parents, respecting every onDelete: Restrict relation
+      await tx.invoiceLine.deleteMany();
+      await tx.invoice.deleteMany();
+      await tx.invoiceSequence.deleteMany();
       await tx.stockTransaction.deleteMany();
       await tx.inventoryItem.deleteMany();
       await tx.supplierPart.deleteMany();
@@ -444,6 +472,7 @@ async function main() {
 
       const copySkus = new Set(partSpecs.filter((spec) => spec.copyOfSku !== undefined).map((spec) => spec.sku));
       const partIdBySku: Record<string, number> = {};
+      const partNameBySku: Record<string, string> = {};
 
       for (const spec of partSpecs) {
         let copyOfPartId: number | undefined;
@@ -476,6 +505,7 @@ async function main() {
           },
         });
         partIdBySku[spec.sku] = part.id;
+        partNameBySku[spec.sku] = spec.name;
 
         if (spec.fitments.length > 0) {
           await tx.partFitment.createMany({
@@ -774,23 +804,136 @@ async function main() {
           },
         });
       }
+
+      // Sample invoices, direct-written (not via services/invoicing.ts) so the seed stays
+      // self-contained. Mirrors what a real checkout does: a negated-quantity SALE
+      // StockTransaction per line, quantityOnHand decremented to match, and an
+      // InvoiceLine snapshotting partSku/partName + linking stockTransactionId. Sold
+      // quantities are kept well below each part's opening stock (see openingStock
+      // above) so quantityOnHand never goes negative.
+      const sampleInvoices: SampleInvoiceSpec[] = [
+        {
+          shopId: shops.main.id,
+          soldByUserId: users.mainStaff.id,
+          customerName: 'Rajesh Patil',
+          customerPhone: '+91 90000 11111',
+          lines: [
+            { partSku: 'STM-BSH-575DI', quantity: 1, unitPrice: 3850 },
+            { partSku: 'HLB-LTV-TRC', quantity: 2, unitPrice: 180 },
+          ],
+        },
+        {
+          shopId: shops.main.id,
+          soldByUserId: users.mainManager.id,
+          customerName: 'Anita Deshmukh',
+          customerPhone: '+91 90000 22222',
+          lines: [
+            { partSku: 'BAT-EXD-09AH', quantity: 1, unitPrice: 1800 },
+            { partSku: 'AFL-KNN-TRC', quantity: 2, unitPrice: 480 },
+          ],
+        },
+        {
+          shopId: shops.highway.id,
+          soldByUserId: users.highwayStaff.id,
+          customerName: 'Prakash Jadhav',
+          customerPhone: '+91 90000 33333',
+          lines: [
+            { partSku: 'STM-BSH-575DI', quantity: 1, unitPrice: 3900 },
+            { partSku: 'HLB-BSH-2W', quantity: 2, unitPrice: 155 },
+          ],
+        },
+        {
+          shopId: shops.highway.id,
+          soldByUserId: users.highwayOwner.id,
+          customerName: 'Sunita More',
+          customerPhone: '+91 90000 44444',
+          lines: [
+            { partSku: 'BAT-EXD-88AH', quantity: 1, unitPrice: 6250 },
+            { partSku: 'STM-LTV-575DI-C1', quantity: 1, unitPrice: 2650 },
+          ],
+        },
+      ];
+
+      const invoiceSeqByShopId = new Map<number, number>();
+
+      for (const invoiceSpec of sampleInvoices) {
+        const nextSeq = (invoiceSeqByShopId.get(invoiceSpec.shopId) ?? 0) + 1;
+        invoiceSeqByShopId.set(invoiceSpec.shopId, nextSeq);
+
+        let total = 0;
+        const lineRows: InvoiceLineRow[] = [];
+
+        for (const line of invoiceSpec.lines) {
+          const partId = partIdBySku[line.partSku];
+          if (partId === undefined) {
+            throw new Error(`sampleInvoices references unknown SKU ${line.partSku}`);
+          }
+
+          const saleTransaction = await tx.stockTransaction.create({
+            data: {
+              shopId: invoiceSpec.shopId,
+              partId,
+              userId: invoiceSpec.soldByUserId,
+              type: StockTransactionType.SALE,
+              quantity: -line.quantity,
+              unitPrice: line.unitPrice,
+            },
+          });
+
+          await tx.inventoryItem.update({
+            where: { shopId_partId: { shopId: invoiceSpec.shopId, partId } },
+            data: { quantityOnHand: { decrement: line.quantity } },
+          });
+
+          const lineTotal = line.quantity * line.unitPrice;
+          total += lineTotal;
+
+          lineRows.push({
+            partId,
+            stockTransactionId: saleTransaction.id,
+            partSku: line.partSku,
+            partName: partNameBySku[line.partSku],
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+            lineTotal,
+          });
+        }
+
+        await tx.invoice.create({
+          data: {
+            shopId: invoiceSpec.shopId,
+            userId: invoiceSpec.soldByUserId,
+            invoiceNumber: formatInvoiceNumber(nextSeq),
+            customerName: invoiceSpec.customerName,
+            customerPhone: invoiceSpec.customerPhone,
+            total,
+            lines: { createMany: { data: lineRows } },
+          },
+        });
+      }
+
+      for (const [shopId, lastSeq] of invoiceSeqByShopId) {
+        await tx.invoiceSequence.create({ data: { shopId, lastSeq } });
+      }
     },
     { timeout: 30000 },
   );
 
+  // Sums ALL transaction types (PURCHASE, SALE, ADJUSTMENT), not just PURCHASE:
+  // this is the true ledger invariant (see stockLedger.test.ts) now that the seed
+  // also writes SALE rows for the sample invoices above.
   const inventoryItems = await prisma.inventoryItem.findMany();
-  const purchasedSums = await prisma.stockTransaction.groupBy({
+  const ledgerSums = await prisma.stockTransaction.groupBy({
     by: ['shopId', 'partId'],
-    where: { type: StockTransactionType.PURCHASE },
     _sum: { quantity: true },
   });
-  const purchasedSumByKey = new Map(
-    purchasedSums.map((row) => [`${row.shopId}-${row.partId}`, row._sum.quantity ?? new Prisma.Decimal(0)]),
+  const ledgerSumByKey = new Map(
+    ledgerSums.map((row) => [`${row.shopId}-${row.partId}`, row._sum.quantity ?? new Prisma.Decimal(0)]),
   );
 
   const ledgerMismatches = inventoryItems.filter((item) => {
-    const purchasedSum = purchasedSumByKey.get(`${item.shopId}-${item.partId}`) ?? new Prisma.Decimal(0);
-    return !item.quantityOnHand.equals(purchasedSum);
+    const ledgerSum = ledgerSumByKey.get(`${item.shopId}-${item.partId}`) ?? new Prisma.Decimal(0);
+    return !item.quantityOnHand.equals(ledgerSum);
   });
 
   if (ledgerMismatches.length > 0) {
@@ -814,6 +957,8 @@ async function main() {
     userCount,
     inventoryItemCount,
     stockTransactionCount,
+    invoiceCount,
+    invoiceLineCount,
   ] = await Promise.all([
     prisma.vehicleClass.count(),
     prisma.vehicleMake.count(),
@@ -829,6 +974,8 @@ async function main() {
     prisma.user.count(),
     prisma.inventoryItem.count(),
     prisma.stockTransaction.count(),
+    prisma.invoice.count(),
+    prisma.invoiceLine.count(),
   ]);
 
   console.log(
@@ -836,7 +983,8 @@ async function main() {
       `vehicleModels=${vehicleModelCount} manufacturers=${manufacturerCount} categories=${categoryCount} ` +
       `partGrades=${partGradeCount} suppliers=${supplierCount} parts=${partCount} crossReferences=${crossReferenceCount} ` +
       `supplierParts=${supplierPartCount} shops=${shopCount} users=${userCount} ` +
-      `inventoryItems=${inventoryItemCount} stockTransactions=${stockTransactionCount}. ` +
+      `inventoryItems=${inventoryItemCount} stockTransactions=${stockTransactionCount} ` +
+      `invoices=${invoiceCount} invoiceLines=${invoiceLineCount}. ` +
       `Ledger invariant OK for ${inventoryItems.length} item(s).`,
   );
 }

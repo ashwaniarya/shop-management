@@ -1,8 +1,11 @@
 import type {
   InventoryItem,
+  Invoice,
+  InvoiceLine,
   Part,
   PartCrossReference,
   PartFitment,
+  Shop,
   StockTransaction,
   SupplierPart,
   User,
@@ -116,5 +119,50 @@ export function serializeSupplierPart(supplierPart: SupplierPart) {
     isPreferred: supplierPart.isPreferred,
     createdAt: supplierPart.createdAt,
     updatedAt: supplierPart.updatedAt,
+  };
+}
+
+export function serializeInvoiceLine(line: InvoiceLine) {
+  return {
+    id: line.id,
+    invoiceId: line.invoiceId,
+    partId: line.partId,
+    stockTransactionId: line.stockTransactionId,
+    partSku: line.partSku,
+    partName: line.partName,
+    quantity: line.quantity.toNumber(),
+    unitPrice: line.unitPrice.toNumber(),
+    lineTotal: line.lineTotal.toNumber(),
+  };
+}
+
+export function serializeInvoice(invoice: Invoice) {
+  return {
+    id: invoice.id,
+    shopId: invoice.shopId,
+    userId: invoice.userId,
+    invoiceNumber: invoice.invoiceNumber,
+    customerName: invoice.customerName,
+    customerPhone: invoice.customerPhone,
+    notes: invoice.notes,
+    total: invoice.total.toNumber(),
+    createdAt: invoice.createdAt,
+  };
+}
+
+export function serializeInvoiceDetail(
+  invoice: Invoice & { lines: InvoiceLine[] },
+  details: { salesmanName: string; shop: Pick<Shop, 'name' | 'address' | 'phone' | 'gstin'> },
+) {
+  return {
+    ...serializeInvoice(invoice),
+    lines: invoice.lines.map(serializeInvoiceLine),
+    salesmanName: details.salesmanName,
+    shop: {
+      name: details.shop.name,
+      address: details.shop.address,
+      phone: details.shop.phone,
+      gstin: details.shop.gstin,
+    },
   };
 }

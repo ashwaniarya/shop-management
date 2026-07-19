@@ -101,6 +101,7 @@ model Part {
   supplierParts   SupplierPart[]
   inventoryItems  InventoryItem[]
   transactions    StockTransaction[]
+  invoiceLines    InvoiceLine[]
 
   @@unique([manufacturerId, manufacturerPartNumber])
   @@index([skuNormalized])
@@ -245,9 +246,11 @@ model Shop {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  users          User[]
-  inventoryItems InventoryItem[]
-  transactions   StockTransaction[]
+  users           User[]
+  inventoryItems  InventoryItem[]
+  transactions    StockTransaction[]
+  invoices        Invoice[]
+  invoiceSequence InvoiceSequence?
 
   @@map("shop")
 }
@@ -267,6 +270,7 @@ model User {
 
   shop         Shop               @relation(fields: [shopId], references: [id], onDelete: Restrict)
   transactions StockTransaction[]
+  invoices     Invoice[]
 
   @@index([shopId])
   @@map("app_user")
@@ -307,8 +311,60 @@ model StockTransaction {
   part Part @relation(fields: [partId], references: [id], onDelete: Restrict)
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
+  invoiceLine InvoiceLine?
+
   @@index([shopId, partId, createdAt])
   @@index([shopId, type, createdAt])
   @@index([userId])
   @@map("stock_transaction")
+}
+
+model Invoice {
+  id            Int      @id @default(autoincrement())
+  shopId        Int      @map("shop_id")
+  userId        Int      @map("user_id")
+  invoiceNumber String   @map("invoice_number")
+  customerName  String?  @map("customer_name")
+  customerPhone String?  @map("customer_phone")
+  notes         String?
+  total         Decimal  @db.Decimal(10, 2)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  shop  Shop          @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  user  User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  lines InvoiceLine[]
+
+  @@unique([shopId, invoiceNumber])
+  @@index([shopId, createdAt])
+  @@map("invoice")
+}
+
+model InvoiceLine {
+  id                 Int     @id @default(autoincrement())
+  invoiceId          Int     @map("invoice_id")
+  partId             Int     @map("part_id")
+  stockTransactionId Int     @unique @map("stock_transaction_id")
+  partSku            String  @map("part_sku")
+  partName           String  @map("part_name")
+  quantity           Decimal @db.Decimal(10, 3)
+  unitPrice          Decimal @map("unit_price") @db.Decimal(10, 2)
+  lineTotal          Decimal @map("line_total") @db.Decimal(10, 2)
+
+  invoice          Invoice          @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  part             Part             @relation(fields: [partId], references: [id], onDelete: Restrict)
+  stockTransaction StockTransaction @relation(fields: [stockTransactionId], references: [id], onDelete: Restrict)
+
+  @@index([invoiceId])
+  @@index([partId])
+  @@map("invoice_line")
+}
+
+model InvoiceSequence {
+  shopId    Int      @id @map("shop_id")
+  lastSeq   Int      @default(0) @map("last_seq")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@map("invoice_sequence")
 }
