@@ -12,6 +12,7 @@ const CATALOG_LINKS = [
   { href: '/suppliers', label: 'Suppliers' },
   { href: '/manufacturers', label: 'Manufacturers' },
   { href: '/categories', label: 'Categories' },
+  { href: '/grades', label: 'Grades' },
   { href: '/shops', label: 'Shops' },
 ];
 
