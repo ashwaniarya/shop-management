@@ -41,7 +41,7 @@ Every entity in this model lives in one of two scopes.
 
 **Catalog scope** is shared across all shops: Manufacturer, Category (a self-referential tree), PartGrade, Part, PartCrossReference, VehicleClass, VehicleMake, VehicleModel, PartFitment, Supplier, and SupplierPart. There is one copy of this data no matter how many shops use the system.
 
-**Shop scope** covers Shop itself, plus everything whose rows reference it: User, InventoryItem, and StockTransaction.
+**Shop scope** covers Shop itself, plus everything whose rows reference it: User, InventoryItem, StockTransaction, Invoice, InvoiceLine, and InvoiceSequence.
 
 ```mermaid
 flowchart TB
@@ -62,7 +62,9 @@ flowchart TB
     Shop --> User["User<br/>(OWNER / MANAGER / STAFF)"]
     Shop --> InventoryItem
     Shop --> StockTransaction["StockTransaction<br/>(append-only ledger)"]
+    Shop --> Invoice["Invoice<br/>(numbered receipt)"]
     StockTransaction -. "maintains cache" .-> InventoryItem
+    StockTransaction -. "1:1 via InvoiceLine" .-> Invoice
   end
   Part -. "stocked as" .-> InventoryItem
 ```
@@ -71,7 +73,7 @@ Two judgment calls shaped this split:
 
 **Supplier is catalog-scope, not shop-scope.** A multi-shop owner typically buys from the same distributors across all their shops, so keeping Supplier shared avoids duplicate data entry. Per-shop supplier preferences can be layered on later without restructuring the model.
 
-**User is shop-scope, for now.** Today a user belongs to exactly one shop. An owner who operates several shops is a real scenario, but it's handled later by lifting User into a shared entity plus a `UserShopRole` join table — a mechanical migration, not a redesign. Building that join now would be speculative; YAGNI applies.
+**User is shop-scope, for now.** Today a user belongs to exactly one shop. An owner who operates several shops is a real scenario, but it's handled later by lifting User into a shared entity plus a `UserShopRole` join table — a mechanical migration, not a redesign. Building that join now would be speculative; YAGNI applies. Section 6 covers what a User can do once authenticated — login, tokens, and the OWNER/MANAGER/STAFF capability matrix that enforces this scope boundary on every request.
 
 ## 4. Full ER diagram
 
@@ -160,6 +162,8 @@ erDiagram
         int shop_id FK
         string name
         string phone
+        string username "nullable, unique — login handle"
+        string password_hash "nullable — bcrypt hash of numeric PIN"
         string role "OWNER|MANAGER|STAFF"
     }
     INVENTORY_ITEM {
@@ -183,6 +187,33 @@ erDiagram
         string notes
         datetime created_at
     }
+    INVOICE {
+        int id PK
+        int shop_id FK
+        int user_id FK "salesman — always the authenticated user"
+        string invoice_number "gapless per shop, e.g. INV-000042"
+        string customer_name "nullable — inline capture, not a Customer entity"
+        string customer_phone "nullable — inline capture"
+        string notes "nullable"
+        decimal total
+        datetime created_at
+    }
+    INVOICE_LINE {
+        int id PK
+        int invoice_id FK
+        int part_id FK
+        int stock_transaction_id FK "unique — 1:1 with the SALE ledger row"
+        string part_sku "snapshot at sale time"
+        string part_name "snapshot at sale time"
+        decimal quantity
+        decimal unit_price
+        decimal line_total
+    }
+    INVOICE_SEQUENCE {
+        int shop_id PK "one row per shop"
+        int last_seq "counter, incremented after each invoice"
+        datetime updated_at
+    }
 
     MANUFACTURER ||--o{ PART : "makes"
     CATEGORY ||--o{ CATEGORY : "parent of"
@@ -204,6 +235,12 @@ erDiagram
     SHOP ||--o{ STOCK_TRANSACTION : "records"
     PART ||--o{ STOCK_TRANSACTION : "moved in"
     USER ||--o{ STOCK_TRANSACTION : "recorded by"
+    SHOP ||--o{ INVOICE : "bills"
+    USER ||--o{ INVOICE : "sold by"
+    INVOICE ||--o{ INVOICE_LINE : "itemizes"
+    PART ||--o{ INVOICE_LINE : "sold as"
+    STOCK_TRANSACTION ||--o| INVOICE_LINE : "documented by"
+    SHOP ||--o| INVOICE_SEQUENCE : "numbers"
 ```
 
 ## 5. Entity catalog
@@ -235,7 +272,7 @@ Relationships:
 
 #### PartGrade
 
-Purpose: a quality tier a part is sold as — Original, 1st Copy, 2nd Copy. See section 7 for the full design.
+Purpose: a quality tier a part is sold as — Original, 1st Copy, 2nd Copy. See section 8 for the full design.
 
 Key attributes:
 - `name` — unique
@@ -263,7 +300,7 @@ Key attributes:
 - `mrp` — nullable
 - `is_active`
 
-Notes: Part is catalog-only — it carries no quantity. `mrp` lives on Part rather than on a per-shop record because it's printed on the box and is the same everywhere. The pair `(manufacturer_id, manufacturer_part_number)` is unique. `grade_id` tags the part's quality tier and `copy_of_part_id` links a copy to its original — both nullable, both independent of each other; see section 7.
+Notes: Part is catalog-only — it carries no quantity. `mrp` lives on Part rather than on a per-shop record because it's printed on the box and is the same everywhere. The pair `(manufacturer_id, manufacturer_part_number)` is unique. `grade_id` tags the part's quality tier and `copy_of_part_id` links a copy to its original — both nullable, both independent of each other; see section 8.
 
 Relationships:
 - One Manufacturer makes many Parts.
@@ -333,7 +370,7 @@ Relationships:
 
 #### PartFitment
 
-Purpose: one "application" row — a part fits a vehicle at some level of specificity: class-wide, make-wide, or one exact model. See section 6 for the full design.
+Purpose: one "application" row — a part fits a vehicle at some level of specificity: class-wide, make-wide, or one exact model. See section 7 for the full design.
 
 Key attributes:
 - `part_id`
@@ -391,17 +428,22 @@ Relationships:
 
 #### User
 
-Purpose: a person who works at a shop and can record stock transactions.
+Purpose: a person who works at a shop, can record stock transactions, and — if provisioned with credentials — can log in. See section 6 for the full authentication and RBAC design.
 
 Key attributes:
 - `shop_id`
 - `name`
 - `phone`
+- `username` — nullable, unique; the login handle
+- `password_hash` — nullable; bcrypt hash of the user's numeric PIN, never the PIN itself
 - `role` — OWNER | MANAGER | STAFF
+
+Notes: `username`/`password_hash` are nullable because a User row can exist without login credentials — a shop can track who's on staff before anyone provisions them a login. The API never returns `password_hash` in any response.
 
 Relationships:
 - One Shop employs many Users.
 - One User records many StockTransaction rows.
+- One User sells many Invoices.
 
 #### InventoryItem
 
@@ -410,7 +452,7 @@ Purpose: the per-shop stock record for a part — quantity, reorder level, prici
 Key attributes:
 - `shop_id`
 - `part_id` — unique per (shop, part)
-- `quantity_on_hand` — cache, maintained by the ledger (see section 8)
+- `quantity_on_hand` — cache, maintained by the ledger (see section 9)
 - `reorder_level`
 - `cost_price` — per shop
 - `selling_price` — per shop
@@ -424,7 +466,7 @@ Relationships:
 
 #### StockTransaction
 
-Purpose: one immutable ledger row recording a single stock movement — a sale, a purchase, or a manual adjustment. See section 8 for the full design.
+Purpose: one immutable ledger row recording a single stock movement — a sale, a purchase, or a manual adjustment. See section 9 for the full design.
 
 Key attributes:
 - `shop_id`
@@ -441,9 +483,100 @@ Relationships:
 - One Part is moved in many StockTransaction rows.
 - One User records many StockTransaction rows.
 
+#### Invoice
+
+Purpose: a numbered counter receipt for a checkout — groups the SALE StockTransaction rows one sale wrote to the ledger, and adds the customer, salesman, and total a receipt needs. See section 10 for the full design.
+
+Key attributes:
+- `shop_id`
+- `user_id` — the salesman; always the authenticated user, never client-supplied
+- `invoice_number` — gapless per shop, e.g. `INV-000042`
+- `customer_name` — nullable, inline capture
+- `customer_phone` — nullable, inline capture
+- `notes` — nullable
+- `total` — sum of line totals
+- `created_at`
+
+Notes: Invoice never moves stock itself. Every line's stock movement is its own SALE StockTransaction row, written in the same transaction as the invoice — the ledger stays the single source of stock truth, and Invoice is a numbered grouping over it, never a second decrement.
+
+Relationships:
+- One Shop bills many Invoices.
+- One User sells many Invoices.
+- One Invoice itemizes many InvoiceLine rows.
+
+#### InvoiceLine
+
+Purpose: one line item on an invoice — a part, quantity, and price — linked 1:1 to the ledger row that actually moved the stock.
+
+Key attributes:
+- `invoice_id`
+- `part_id`
+- `stock_transaction_id` — unique; the one SALE StockTransaction row this line documents
+- `part_sku`, `part_name` — snapshot of the part at sale time, so a printed invoice survives later renames
+- `quantity`
+- `unit_price`
+- `line_total` — `quantity × unit_price`, rounded to paise before summing into `Invoice.total`
+
+Relationships:
+- One Invoice itemizes many InvoiceLine rows.
+- One Part is sold as many InvoiceLine rows.
+- One StockTransaction is documented by zero or one InvoiceLine row (a SALE row entered directly against the ledger, rather than through checkout, has none).
+
+#### InvoiceSequence
+
+Purpose: the per-shop counter behind gapless invoice numbering — one row per shop, holding the last sequence number issued.
+
+Key attributes:
+- `shop_id` — PK, one row per shop
+- `last_seq` — incremented once per successful invoice
+- `updated_at`
+
+Notes: incremented last, after every line's stock movement has already succeeded, so a checkout that rolls back (an oversell on any line) never consumes a number.
+
+Relationships:
+- One Shop numbers its Invoices through one InvoiceSequence row.
+
 **Part identity summary.** A part is findable by four kinds of number: its own `sku` (internal), its `manufacturer_part_number`, any `PartCrossReference.ref_number`, or any `SupplierPart.supplier_part_number`. A search feature should hit all four, matched against normalized input.
 
-## 6. Fitment: the specificity ladder (core design decision)
+## 6. Authentication & RBAC
+
+Every endpoint under `/api/v1/*` now requires proof of identity, and most require proof of permission. Two mechanisms, layered: **authentication** establishes who is calling; **authorization** decides what that identity may do, given their `role` and their `shop_id`.
+
+**Login is username + numeric PIN.** `POST /auth/login` takes `{ username, pin }` and returns a signed token plus the user's public profile. The PIN (4–6 digits) is checked with bcrypt against `User.password_hash` — the PIN itself is never stored. A username that doesn't exist still pays the full bcrypt-compare cost, checked against a throwaway hash, so a missing user and a wrong PIN are not timing-distinguishable from outside.
+
+**Tokens are stateless JWTs.** A successful login signs a Bearer token carrying three claims — `sub` (user id), `shopId`, `role` — valid for about 12 hours. Nothing is persisted server-side, so `POST /auth/logout` is a 204 with no state change: the client discards its own copy, and the token otherwise remains valid until it expires on its own.
+
+**One global gate, two composable guards.** `authenticate` sits in front of every `/api/v1/*` route except `POST /auth/login`: it verifies the token, reloads the user from the database (so a deactivated user is rejected even mid-lifetime of an otherwise-valid token), and attaches `req.user`. Two guards compose on top, per route: `requireRole(...roles)` rejects with 403 unless the caller's role is in the allowed list, and `requireSameShop()` rejects with 403 unless the route's `:shopId` matches the caller's own `shopId` — the mechanism that turns shop-scope (section 3) into an enforced boundary rather than just a schema convention. A token scoped to one shop gets a 403, not a 404, reaching for another shop's data.
+
+The capability matrix:
+
+| Capability | OWNER | MANAGER | STAFF |
+|---|:---:|:---:|:---:|
+| Read catalog (parts, manufacturers, categories, vehicles, suppliers, grades) | ✅ | ✅ | ✅ |
+| Mutate catalog (create/update/deactivate the above) | ✅ | ✅ | ❌ |
+| Update InventoryItem (price, reorder level, storage location) | ✅ | ✅ | ❌ |
+| Ring up a sale / invoice | ✅ | ✅ | ✅ |
+| Record a PURCHASE or ADJUSTMENT ledger row | ✅ | ✅ | ❌ |
+| Create or manage shops | ✅ | ❌ | ❌ |
+| Provision shop users (create/update/deactivate logins) | ✅ | ❌ | ❌ |
+
+```mermaid
+sequenceDiagram
+  actor U as Shop User
+  participant A as API
+  participant DB as Database
+  U->>A: POST /auth/login (username, pin)
+  A->>DB: find user by username
+  A->>A: bcrypt.compare(pin, password_hash)
+  A-->>U: 200 with token + user (JWT: sub, shopId, role, ~12h)
+  U->>A: GET /api/v1/shops/2/stock-transactions, Bearer token
+  A->>A: authenticate, then requireSameShop, then requireRole
+  A-->>U: 200 with data, or 403 Forbidden
+```
+
+Every user belongs to exactly one shop, and every request is scoped to it — cross-shop users (one person, several shops) remain deferred; see section 3 and section 13.
+
+## 7. Fitment: the specificity ladder (core design decision)
 
 PartFitment models how specifically a part is tied to a vehicle. One row is one application. `vehicle_class_id` is always required; `vehicle_make_id` and `vehicle_model_id` are nullable and narrow the row further, one level at a time.
 
@@ -502,9 +635,9 @@ sequenceDiagram
   S-->>U: part found via PartCrossReference
 ```
 
-## 7. Grades and copies: the flat family (core design decision)
+## 8. Grades and copies: the flat family (core design decision)
 
-Fitment (section 6) classifies a part by what it fits. The trade has a second classification axis: what quality tier it is. The same starter motor for the same tractor sits on the counter in three boxes — the original brand, a "1st copy" (a reputable clone at two-thirds the price), and a "2nd copy" (a budget clone at half) — and the customer's next question after "does it fit?" is "original or copy?". Cross-references don't cover this: a PartCrossReference row is an alternate **number** for the same product, while a copy is a **different product** doing the same job. The model adds three pieces:
+Fitment (section 7) classifies a part by what it fits. The trade has a second classification axis: what quality tier it is. The same starter motor for the same tractor sits on the counter in three boxes — the original brand, a "1st copy" (a reputable clone at two-thirds the price), and a "2nd copy" (a budget clone at half) — and the customer's next question after "does it fit?" is "original or copy?". Cross-references don't cover this: a PartCrossReference row is an alternate **number** for the same product, while a copy is a **different product** doing the same job. The model adds three pieces:
 
 **Each tier is its own Part.** A 1st copy is not a variant flag on the original's row. It is a physically different product from a different manufacturer, with its own part number, its own MRP, its own suppliers, per-shop stock, and ledger history — so it gets a full Part row and everything that comes with one.
 
@@ -564,9 +697,9 @@ Two alternatives were considered and rejected:
 
 **A grade enum on Part** — rejected for the same reason VehicleClass is a table: the vocabulary differs between trades ("OES", "premium copy") and grows in the field, and adding a value must not require a code change.
 
-**Copy as a PartCrossReference row** — rejected: a cross-reference is an alternate number for the *same* physical product; a copy is a *different* physical product that needs its own stock, prices, suppliers, and history, which only a full Part row provides. Multi-level trees were never a contender — the counter question is "what tiers of this part?", answered in one hop by a flat family. Supersession (one maker replacing its own part over time) is a genuinely chain-shaped relationship and deliberately stays out of this link; see section 11.
+**Copy as a PartCrossReference row** — rejected: a cross-reference is an alternate number for the *same* physical product; a copy is a *different* physical product that needs its own stock, prices, suppliers, and history, which only a full Part row provides. Multi-level trees were never a contender — the counter question is "what tiers of this part?", answered in one hop by a flat family. Supersession (one maker replacing its own part over time) is a genuinely chain-shaped relationship and deliberately stays out of this link; see section 13.
 
-## 8. The stock ledger — sold vs remaining
+## 9. The stock ledger — sold vs remaining
 
 StockTransaction is an append-only ledger: every SALE / PURCHASE / ADJUSTMENT is one immutable row — a quantity (`+in` / `−out`), the price at the time, and who recorded it. Rows are never edited or deleted; a correction is a new row.
 
@@ -596,7 +729,38 @@ flowchart LR
   QOH --> REMAIN["'What is remaining?'"]
 ```
 
-## 9. The item-360° view
+## 10. Invoicing / POS
+
+Building on the ledger (section 9): an Invoice does not move stock. It groups the SALE rows one checkout already wrote to StockTransaction, and adds the numbering, customer, and total a paper receipt needs. Three tables carry this — Invoice (the receipt header), InvoiceLine (one row per part sold), and InvoiceSequence (the per-shop counter behind the invoice number).
+
+**Every InvoiceLine links 1:1 to the SALE row it documents.** `InvoiceLine.stock_transaction_id` is unique, not just indexed, so each ledger row backs exactly one invoice line. This is deliberate: the ledger stays the single source of stock truth, and an invoice is a numbered grouping over it, never a second decrement. `quantity_on_hand` only ever moves through StockTransaction; Invoice/InvoiceLine are a read-oriented layer on top of it.
+
+**Checkout is one multi-line transaction.** `POST /shops/:shopId/invoices` takes an optional customer and a list of `{ partId, quantity, unitPrice }` lines; the stock movement for every line and the invoice itself are written inside one database transaction. Each line appends a negated SALE StockTransaction row exactly as a manual ledger entry would — an oversell on *any* line rolls back the *entire* basket, so a five-line sale never leaves four lines sold and one rejected. Line totals are rounded to paise before summing, so the printed lines reconcile exactly against the printed grand total.
+
+**Invoice numbering is gapless, per shop.** InvoiceSequence holds one `last_seq` counter per shop, and the number is allocated *last* — after every line's stock movement has already succeeded — so a checkout that rolls back for an oversell never consumes a number. Numbers render as `INV-000042` and are unique per shop, not globally.
+
+**Customer capture is inline, not a Customer entity.** `customer_name`/`customer_phone` are free-text nullable columns directly on Invoice — enough to put a name on the receipt, not enough to look up a customer's history across visits. A reusable Customer entity (repeat-customer lookup, credit accounts, loyalty) stays a deferred refinement; see section 13.
+
+**The salesman is always the authenticated user.** `Invoice.user_id` comes from the request's JWT, never the request body — the same "acting user from the token" rule the stock-transaction endpoint follows. Any authenticated user on the shop can ring up a sale — there's no role restriction on this route, unlike PURCHASE/ADJUSTMENT on the raw ledger, which stay manager/owner-gated (section 6).
+
+**What an invoice is not.** It's a counter receipt, not a GST-compliant tax invoice — no HSN code, no tax-rate breakup, no reverse-charge handling. GST tax breakup and pricing tiers remain deferred; see section 13.
+
+```mermaid
+flowchart LR
+  CHECKOUT["🧾 Checkout<br/>(one transaction)"] -->|"per line: append<br/>SALE, qty −N"| LEDGER["📒 StockTransaction<br/>(section 9, unchanged)"]
+  CHECKOUT -->|"allocated LAST,<br/>after all lines succeed"| SEQ["InvoiceSequence<br/>last_seq++"]
+  CHECKOUT -->|"one row per checkout"| INV["Invoice<br/>number · customer · total"]
+  LEDGER -. "1:1 via stock_transaction_id" .-> LINE["InvoiceLine<br/>part · qty · price"]
+  INV --> LINE
+```
+
+Two alternatives were considered and rejected:
+
+**A second quantity column updated directly by the invoice.** Rejected: it would create two paths that can move stock — the ledger and the invoice — which can drift out of sync. Routing every sale through the same stock-delta path the manual stock-transaction endpoint uses keeps StockTransaction the only writer of stock movement.
+
+**A reusable Customer entity from day one.** Rejected for now: this round only needed a name and phone on the printed receipt, not repeat-customer lookup or credit accounts. Inline capture ships the same receipt with less schema; a real Customer table is an additive migration later, not a redesign — see section 13.
+
+## 11. The item-360° view
 
 One part-centric lookup answers "tell me everything about this item":
 
@@ -614,7 +778,7 @@ flowchart LR
 
 Identity resolves through `sku`, `manufacturer_part_number`, and PartCrossReference. Category and Manufacturer classify it. PartGrade and the copy-family link say which quality tier it is and which alternatives exist across tiers. PartFitment says which vehicles it fits. SupplierPart says who can supply more of it. InventoryItem says what this shop has of it and at what price. StockTransaction shows its movement history.
 
-## 10. Glossary
+## 12. Glossary
 
 **Part vs InventoryItem** — Part is the catalog record: what the part is, shared across every shop. InventoryItem is the per-shop stock record: how many this shop has, and at what price. A Part can exist with zero InventoryItem rows.
 
@@ -630,22 +794,27 @@ Identity resolves through `sku`, `manufacturer_part_number`, and PartCrossRefere
 
 **Ledger** — The append-only StockTransaction table. Every stock movement is a new row; nothing is edited or deleted after the fact.
 
+**Invoice** — A numbered counter receipt (section 10) grouping the SALE ledger rows from one checkout. It groups the ledger; it never moves stock a second time.
+
 **Specificity ladder** — The class → make → model narrowing pattern used by PartFitment: class is required, make and model are optional, and each one narrows the previous level.
 
-**Catalog scope vs shop scope** — Catalog-scope data (Part, Manufacturer, PartFitment, and others) is shared across every shop. Shop-scope data (InventoryItem, StockTransaction, User) belongs to one shop.
+**Catalog scope vs shop scope** — Catalog-scope data (Part, Manufacturer, PartFitment, and others) is shared across every shop. Shop-scope data (InventoryItem, StockTransaction, User, Invoice) belongs to one shop.
 
-## 11. Deliberately deferred (YAGNI)
+**RBAC (role-based access control)** — The OWNER/MANAGER/STAFF capability matrix (section 6), enforced on every request by the `authenticate`/`requireRole`/`requireSameShop` middleware chain.
+
+## 13. Deliberately deferred (YAGNI)
 
 The following are out of scope for the current model. Each has an intended landing spot, so adding it later is an extension, not a redesign.
 
-- **Full POS/invoicing** (Customer, Invoice with line items, GST invoice numbering) — a SALE row in StockTransaction already records the stock movement; an Invoice entity would group a customer's SALE rows together and add the numbering and tax fields a real invoice needs.
+- **Reusable Customer entity** (repeat-customer lookup across visits, credit accounts, loyalty) — Invoicing (section 10) captures `customerName`/`customerPhone` inline on each Invoice; promoting that into a shared, queryable Customer table linked from Invoice would be an additive migration, not a redesign.
+- **GST-compliant tax invoicing** (HSN codes, tax-rate breakup, reverse charge) — Invoice (section 10) is a counter receipt with a `total`, not a tax document; adding GST fields would extend Invoice/InvoiceLine rather than replace them.
 - **Purchasing documents** (Purchase Order, Goods Receipt Note) — PURCHASE rows in StockTransaction already record the movement; PO/GRN entities would wrap that movement with an approval and receiving workflow.
 - **Pricing tiers** (e.g. retail vs. wholesale vs. mechanic pricing) — would extend InventoryItem with multiple price columns, or a separate PriceTier table keyed by shop and customer segment.
 - **Grade-aware pricing rules** (e.g. a default margin per grade, or "price the 1st copy at 70% of the original") — pricing already lives per shop on InventoryItem; a rule would be a suggestion layer on top, not a schema change.
 - **Barcodes** — would add a barcode column to Part, or a separate table if a part needs more than one barcode.
 - **Year/variant/engine fitment depth** — would extend PartFitment with further nullable narrowing columns (`year_from`, `year_to`, `engine_code`), following the same ladder pattern already used for class/make/model.
 - **Brand-vs-Manufacturer split** — would split today's single Manufacturer entity into Brand (marketing name) and Manufacturer (actual maker), with Part referencing Brand instead.
-- **Cross-shop users** (UserShopRole) — would lift today's shop-scoped User into a shared User plus a UserShopRole join table, as outlined in section 3.
+- **Cross-shop users** (UserShopRole) — would lift today's shop-scoped User into a shared User plus a UserShopRole join table, as outlined in section 3; `requireSameShop` (section 6) would need to check membership in a join table rather than equality against a single `shop_id`.
 - **Multi-category parts** — would replace `Part.category_id` with a PartCategory join table, letting one part belong to more than one category.
 - **Supersession chains** (this part replaced that part, which replaced an earlier one) — PartCrossReference already has a SUPERSEDES `ref_type` for a single link; a full chain would need its own self-referential structure on Part, separate from `copy_of_part_id` — supersession is one maker's replacement timeline, not a quality tier, and unlike copy families it is chain-shaped by nature.
 - **Audit trail** (who changed what, when, across all entities) — would need a generic AuditLog entity capturing before/after state, separate from StockTransaction, which only tracks stock movements.

@@ -122,9 +122,9 @@ export function InvoiceDetailView({ invoiceId }: { invoiceId: number }) {
           <thead>
             <tr className="text-[10px] tracking-[0.1em] text-ink-500 uppercase">
               <th className="pb-1.5 text-left font-medium">Item</th>
-              <th className="pb-1.5 text-right font-medium">Qty</th>
-              <th className="pb-1.5 text-right font-medium">Price</th>
-              <th className="pb-1.5 text-right font-medium">Total</th>
+              <th className="pb-1.5 pl-3 text-right font-medium">Qty</th>
+              <th className="pb-1.5 pl-3 text-right font-medium">Price</th>
+              <th className="pb-1.5 pl-3 text-right font-medium">Total</th>
             </tr>
           </thead>
           <tbody>
@@ -134,9 +134,9 @@ export function InvoiceDetailView({ invoiceId }: { invoiceId: number }) {
                   {line.partName}
                   <span className="block font-mono text-[10px] text-ink-500">{line.partSku}</span>
                 </td>
-                <td className="py-1.5 text-right font-mono tabular-nums">{formatQuantity(line.quantity)}</td>
-                <td className="py-1.5 text-right font-mono tabular-nums">{formatCurrency(line.unitPrice)}</td>
-                <td className="py-1.5 text-right font-mono tabular-nums">{formatCurrency(line.lineTotal)}</td>
+                <td className="py-1.5 pl-3 text-right font-mono tabular-nums">{formatQuantity(line.quantity)}</td>
+                <td className="py-1.5 pl-3 text-right font-mono tabular-nums">{formatCurrency(line.unitPrice)}</td>
+                <td className="py-1.5 pl-3 text-right font-mono tabular-nums">{formatCurrency(line.lineTotal)}</td>
               </tr>
             ))}
           </tbody>
