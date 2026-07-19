@@ -50,7 +50,7 @@ export function PartsFilterBar({ value, onChange, categories, manufacturers, par
 
   return (
     <div className="flex flex-col gap-4 rounded-md border border-ink-800 bg-ink-900 p-4">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <Input
           label="Search"
           placeholder="Name or description…"

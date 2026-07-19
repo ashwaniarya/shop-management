@@ -2,17 +2,11 @@
 
 import { useEffect, useState } from 'react';
 
+import { MATCHED_BY_LABEL } from '@/components/parts/matchedByLabel';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { searchPartsByNumber, type PartSearchMatchedBy, type PartSearchResult } from '@/lib/api';
-
-const MATCHED_BY_LABEL: Record<PartSearchMatchedBy, string> = {
-  SKU: 'SKU',
-  MPN: 'Mfr. part #',
-  CROSS_REFERENCE: 'Cross-ref',
-  SUPPLIER_NUMBER: 'Supplier #',
-};
+import { searchPartsByNumber, type PartSearchResult } from '@/lib/api';
 
 export interface CopyOfPartSelection {
   id: number;
@@ -31,8 +25,9 @@ export function CopyOfPartPicker({ value, onSelect }: CopyOfPartPickerProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
+  const trimmedQuery = query.trim();
+
   useEffect(() => {
-    const trimmedQuery = query.trim();
     if (trimmedQuery === '') {
       setResults(null);
       setError(null);
@@ -64,7 +59,7 @@ export function CopyOfPartPicker({ value, onSelect }: CopyOfPartPickerProps) {
       isCancelled = true;
       clearTimeout(timeoutId);
     };
-  }, [query]);
+  }, [trimmedQuery]);
 
   function handlePick(result: PartSearchResult) {
     onSelect({ id: result.id, sku: result.sku, name: result.name });
@@ -105,7 +100,7 @@ export function CopyOfPartPicker({ value, onSelect }: CopyOfPartPickerProps) {
         </p>
       ) : results !== null ? (
         results.length === 0 ? (
-          <p className="text-xs text-ink-500">No part matches &ldquo;{query.trim()}&rdquo;.</p>
+          <p className="text-xs text-ink-500">No part matches &ldquo;{trimmedQuery}&rdquo;.</p>
         ) : (
           <ul className="divide-y divide-ink-850 overflow-hidden rounded-sm border border-ink-800">
             {results.map((result) => (

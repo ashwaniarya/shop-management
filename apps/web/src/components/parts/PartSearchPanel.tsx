@@ -4,24 +4,22 @@ import Link from 'next/link';
 import { useState } from 'react';
 
 import { PartGradeBadge } from '@/components/PartGradeBadge';
+import { MATCHED_BY_LABEL } from '@/components/parts/matchedByLabel';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { Input } from '@/components/ui/Input';
 import { LoadingBlock } from '@/components/ui/LoadingRow';
-import { usePartGradesLookup } from '@/hooks/usePartGradesLookup';
-import { searchPartsByNumber, type PartSearchMatchedBy, type PartSearchResult } from '@/lib/api';
+import { searchPartsByNumber, type PartSearchResult } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
+import type { PartGrade } from '@shop/shared';
 
-const MATCHED_BY_LABEL: Record<PartSearchMatchedBy, string> = {
-  SKU: 'SKU',
-  MPN: 'Mfr. part #',
-  CROSS_REFERENCE: 'Cross-ref',
-  SUPPLIER_NUMBER: 'Supplier #',
-};
+interface PartSearchPanelProps {
+  partGrades: PartGrade[];
+  partGradesById: Map<number, PartGrade>;
+}
 
-export function PartSearchPanel() {
-  const { partGrades, partGradesById } = usePartGradesLookup();
+export function PartSearchPanel({ partGrades, partGradesById }: PartSearchPanelProps) {
   const [query, setQuery] = useState('');
   const [searchedFor, setSearchedFor] = useState<string | null>(null);
   const [results, setResults] = useState<PartSearchResult[] | null>(null);

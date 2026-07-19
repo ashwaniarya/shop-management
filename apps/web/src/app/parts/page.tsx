@@ -32,7 +32,7 @@ export default function PartsPage() {
         </Button>
       </div>
 
-      <PartSearchPanel />
+      <PartSearchPanel partGrades={partGrades} partGradesById={partGradesById} />
 
       <PartsFilterBar
         value={filters}

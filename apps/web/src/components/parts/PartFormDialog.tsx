@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 
 import { CopyOfPartPicker, type CopyOfPartSelection } from '@/components/parts/CopyOfPartPicker';
+import { reconcileCopyOfPrefill } from '@/components/parts/reconcileCopyOfPrefill';
 import { FormActions } from '@/components/ui/FormActions';
 import { Dialog } from '@/components/ui/Dialog';
 import { Input } from '@/components/ui/Input';
@@ -110,9 +111,7 @@ function PartForm({
           return;
         }
         setCopyOf((current) =>
-          current?.id === originalPart.id
-            ? { id: originalPart.id, sku: originalPart.sku, name: originalPart.name }
-            : current,
+          reconcileCopyOfPrefill(current, { id: originalPart.id, sku: originalPart.sku, name: originalPart.name }),
         );
       })
       .catch(() => {});
