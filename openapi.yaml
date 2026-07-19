@@ -27,6 +27,8 @@ tags:
     description: Vehicle manufacturers (e.g. Honda, Maruti Suzuki).
   - name: Vehicle Models
     description: Specific vehicle models, scoped to a make and class.
+  - name: Part Grades
+    description: Quality grades for parts (e.g. Original, 1st Copy, 2nd Copy). User-managed lookup.
   - name: Parts
     description: The spare-parts catalog.
   - name: Part Fitments
@@ -618,6 +620,98 @@ paths:
       responses:
         '204':
           description: The vehicle model was deactivated.
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/part-grades:
+    get:
+      operationId: listPartGrades
+      summary: List part grades
+      tags: ["Part Grades"]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: A page of part grades.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartGradeListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      operationId: createPartGrade
+      summary: Create a part grade
+      tags: ["Part Grades"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PartGradeCreate'
+      responses:
+        '201':
+          description: The created part grade.
+          headers:
+            Location:
+              description: URL of the created part grade.
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartGrade'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/v1/part-grades/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      operationId: getPartGrade
+      summary: Get a part grade by id
+      tags: ["Part Grades"]
+      responses:
+        '200':
+          description: The part grade.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartGrade'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: updatePartGrade
+      summary: Update a part grade
+      tags: ["Part Grades"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PartGradeUpdate'
+      responses:
+        '200':
+          description: The updated part grade.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartGrade'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deletePartGrade
+      summary: Soft-delete a part grade
+      description: Sets `isActive` to `false`. Does not remove the row.
+      tags: ["Part Grades"]
+      responses:
+        '204':
+          description: The part grade was deactivated.
         '404':
           $ref: '#/components/responses/NotFound'
 
@@ -1849,6 +1943,52 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/VehicleModel'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    PartGrade:
+      type: object
+      required: [id, name, displayOrder, isActive, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        displayOrder:
+          type: integer
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    PartGradeCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        displayOrder:
+          type: integer
+    PartGradeUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        displayOrder:
+          type: integer
+        isActive:
+          type: boolean
+    PartGradeListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PartGrade'
         meta:
           $ref: '#/components/schemas/Meta'
 

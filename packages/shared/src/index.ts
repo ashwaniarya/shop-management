@@ -6,6 +6,7 @@ export * from './supplier';
 export * from './vehicleClass';
 export * from './vehicleMake';
 export * from './vehicleModel';
+export * from './partGrade';
 export * from './part';
 export * from './partFitment';
 export * from './partCrossReference';
