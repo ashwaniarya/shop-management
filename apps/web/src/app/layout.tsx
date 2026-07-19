@@ -1,8 +1,7 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Big_Shoulders, IBM_Plex_Sans, JetBrains_Mono } from 'next/font/google';
 
-import { Sidebar } from '@/components/Sidebar';
-import { ShopSelector } from '@/components/ShopSelector';
+import { AppShell } from '@/components/AppShell';
 import { ShopProvider } from '@/context/ShopContext';
 
 import './globals.css';
@@ -30,23 +29,18 @@ export const metadata: Metadata = {
   description: 'Multi-shop parts counter management system',
 };
 
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: '#0d0e10',
+};
+
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${sansFont.variable} ${monoFont.variable} ${displayFont.variable}`}>
       <body className="antialiased">
         <ShopProvider>
-          <div className="flex min-h-screen">
-            <Sidebar />
-            <div className="flex flex-1 flex-col">
-              <header className="flex items-center justify-between border-b border-ink-800 bg-ink-900 px-6 py-3">
-                <p className="font-mono text-xs tracking-wide text-ink-500">
-                  Parts counter workstation
-                </p>
-                <ShopSelector />
-              </header>
-              <main className="bg-graticule flex-1 p-6">{children}</main>
-            </div>
-          </div>
+          <AppShell>{children}</AppShell>
         </ShopProvider>
       </body>
     </html>

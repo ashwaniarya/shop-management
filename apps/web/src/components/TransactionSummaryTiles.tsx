@@ -6,7 +6,7 @@ export function TransactionSummaryTiles({ summary, rangeCaption }: { summary: Tr
   const maxAmount = Math.max(summary.sales.revenue, summary.purchases.cost, 1);
 
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <StatTile
         label="Sales revenue"
         value={formatCurrency(summary.sales.revenue)}
