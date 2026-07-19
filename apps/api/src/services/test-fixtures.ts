@@ -17,6 +17,8 @@ export interface PartFixtureInput extends CatalogFixture {
   sku: string;
   manufacturerPartNumber: string;
   name?: string;
+  gradeId?: number;
+  copyOfPartId?: number;
 }
 
 export async function createPartFixture(client: PrismaClient, input: PartFixtureInput): Promise<Part> {
@@ -29,6 +31,8 @@ export async function createPartFixture(client: PrismaClient, input: PartFixture
       mpnNormalized: normalizeNumber(input.manufacturerPartNumber),
       name: input.name ?? input.sku,
       categoryId: input.categoryId,
+      gradeId: input.gradeId,
+      copyOfPartId: input.copyOfPartId,
     },
   });
 }
