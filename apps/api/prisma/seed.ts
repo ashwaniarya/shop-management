@@ -1,3 +1,7 @@
+// ⚠️ DESTRUCTIVE — DEV / FIRST-RUN ONLY. This seed deleteMany()s every table before
+// inserting demo data, and its PINs are public (owner/1111 …). Never run it against a
+// real deployment. To provision the first login on a deployed database use
+// `pnpm --filter api bootstrap:owner` (createOwner) instead. See docs/deploy-railway.md.
 import { formatInvoiceNumber } from '@shop/shared';
 import { Prisma, RefType, StockTransactionType, UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
