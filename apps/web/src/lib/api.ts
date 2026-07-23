@@ -9,6 +9,7 @@ import type {
   InvoiceDetail,
   InvoiceListItem,
   LoginResponse,
+  Register,
   Manufacturer,
   ManufacturerCreate,
   ManufacturerUpdate,
@@ -265,6 +266,10 @@ export interface TransactionSummary {
 
 export function login(username: string, pin: string): Promise<LoginResponse> {
   return post<LoginResponse>('/auth/login', { username, pin });
+}
+
+export function register(input: Register): Promise<LoginResponse> {
+  return post<LoginResponse>('/auth/register', input);
 }
 
 export function getMe(): Promise<AuthUser> {

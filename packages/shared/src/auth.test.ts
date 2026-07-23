@@ -1,7 +1,7 @@
 // Unit test: pure logic, isolated schema
 import { describe, expect, it } from 'vitest';
 
-import { authUserSchema, loginSchema } from './auth';
+import { authUserSchema, loginSchema, registerSchema } from './auth';
 
 describe('loginSchema', () => {
   it('accepts a valid username and pin', () => {
@@ -22,6 +22,30 @@ describe('loginSchema', () => {
 
   it('rejects a non-numeric pin', () => {
     expect(loginSchema.safeParse({ username: 'suresh', pin: 'abcd' }).success).toBe(false);
+  });
+});
+
+describe('registerSchema', () => {
+  const valid = { shopName: 'My Store', ownerName: 'Asha', username: 'asha_store', pin: '123456' };
+
+  it('accepts a valid registration', () => {
+    expect(registerSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it('rejects a pin that is not exactly 6 digits', () => {
+    expect(registerSchema.safeParse({ ...valid, pin: '1234' }).success).toBe(false);
+    expect(registerSchema.safeParse({ ...valid, pin: '12345' }).success).toBe(false);
+    expect(registerSchema.safeParse({ ...valid, pin: '1234567' }).success).toBe(false);
+    expect(registerSchema.safeParse({ ...valid, pin: 'abcdef' }).success).toBe(false);
+  });
+
+  it('rejects a username shorter than 3 characters', () => {
+    expect(registerSchema.safeParse({ ...valid, username: 'ab' }).success).toBe(false);
+  });
+
+  it('rejects an empty shop name or owner name', () => {
+    expect(registerSchema.safeParse({ ...valid, shopName: '' }).success).toBe(false);
+    expect(registerSchema.safeParse({ ...valid, ownerName: '' }).success).toBe(false);
   });
 });
 

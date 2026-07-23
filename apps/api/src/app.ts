@@ -32,6 +32,10 @@ function parseAllowedOrigins(rawAllowedOrigins: string | undefined): string[] {
 
 export const app = express();
 
+// Behind Railway's proxy: trust the first hop so express-rate-limit keys on the real
+// client IP (from X-Forwarded-For) instead of the proxy. Scoped to 1, not `true`.
+app.set('trust proxy', 1);
+
 app.use(cors({ origin: parseAllowedOrigins(process.env.ALLOWED_ORIGINS) }));
 app.use(express.json());
 

@@ -21,3 +21,15 @@ export const loginResponseSchema = z.object({
   user: authUserSchema,
 });
 export type LoginResponse = z.infer<typeof loginResponseSchema>;
+
+export const registerSchema = z.object({
+  shopName: z.string().min(1, 'shop name is required'),
+  ownerName: z.string().min(1, 'your name is required'),
+  username: z.string().min(3, 'username must be at least 3 characters'),
+  pin: z.string().regex(/^\d{6}$/, 'PIN must be 6 digits'),
+});
+export type Register = z.infer<typeof registerSchema>;
+
+// Registration logs the new owner straight in, so its response is the login shape.
+export const registerResponseSchema = loginResponseSchema;
+export type RegisterResponse = z.infer<typeof registerResponseSchema>;

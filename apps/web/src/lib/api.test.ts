@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ApiError, decideUnauthorizedAction, del, get, listShops, post } from './api';
+import { ApiError, decideUnauthorizedAction, del, get, listShops, post, register } from './api';
 
 function mockFetchOnce(response: { ok: boolean; status: number; json?: () => Promise<unknown> }) {
   const fetchMock = vi.fn().mockResolvedValue({
@@ -152,5 +152,19 @@ describe('api client', () => {
     expect(caughtError).toBeInstanceOf(ApiError);
     expect((caughtError as ApiError).code).toBe('VALIDATION_ERROR');
     expect((caughtError as ApiError).details).toEqual(details);
+  });
+
+  it('posts the register body to /auth/register and returns the login response', async () => {
+    const loginResponse = { token: 'jwt-token', user: { id: 7, shopId: 3, name: 'Asha', role: 'OWNER' } };
+    const fetchMock = mockFetchOnce({ ok: true, status: 201, json: () => Promise.resolve(loginResponse) });
+
+    const body = { shopName: 'My Store', ownerName: 'Asha', username: 'asha_store', pin: '123456' };
+    const result = await register(body);
+
+    expect(result).toEqual(loginResponse);
+    const [calledUrl, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(calledUrl).toBe('http://localhost:4000/api/v1/auth/register');
+    expect(requestInit.method).toBe('POST');
+    expect(requestInit.body).toBe(JSON.stringify(body));
   });
 });

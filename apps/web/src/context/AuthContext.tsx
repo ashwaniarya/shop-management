@@ -2,15 +2,16 @@
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 
-import type { AuthUser } from '@shop/shared';
+import type { AuthUser, Register } from '@shop/shared';
 
-import { getMe, login as apiLogin, logout as apiLogout } from '@/lib/api';
+import { getMe, login as apiLogin, logout as apiLogout, register as apiRegister } from '@/lib/api';
 import { clearAuthToken, getAuthToken, setAuthToken } from '@/lib/authToken';
 
 interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
   login: (username: string, pin: string) => Promise<void>;
+  register: (input: Register) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -43,6 +44,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(authUser);
   }, []);
 
+  const register = useCallback(async (input: Register) => {
+    const { token, user: authUser } = await apiRegister(input);
+    setAuthToken(token);
+    setUser(authUser);
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       await apiLogout();
@@ -54,7 +61,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.location.href = '/login';
   }, []);
 
-  return <AuthContext.Provider value={{ user, isLoading, login, logout }}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{ user, isLoading, login, register, logout }}>{children}</AuthContext.Provider>
+  );
 }
 
 export function useAuth(): AuthContextValue {

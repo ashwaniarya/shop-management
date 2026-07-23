@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
@@ -90,6 +91,13 @@ export default function LoginPage() {
             <FormError error={submitError} />
           </div>
         </form>
+
+        <p className="mt-5 text-center text-xs text-ink-400">
+          New here?{' '}
+          <Link href="/register" className="font-medium text-accent-400 hover:text-accent-300 hover:underline">
+            Create your shop
+          </Link>
+        </p>
 
         <p className="mt-6 text-center font-mono text-[10px] tracking-[0.14em] text-ink-600 uppercase">
           Authorized personnel only

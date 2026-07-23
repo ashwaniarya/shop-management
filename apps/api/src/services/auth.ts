@@ -1,5 +1,5 @@
 import type { AuthUser } from '@shop/shared';
-import type { UserRole } from '@prisma/client';
+import { UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
@@ -59,5 +59,35 @@ export async function login(username: string, pin: string): Promise<{ token: str
   }
 
   const authUser: AuthUser = { id: user.id, shopId: user.shopId, name: user.name, role: user.role };
+  return { token: signToken(authUser), user: authUser };
+}
+
+// Creates a brand-new shop and its first OWNER in one transaction, then returns the
+// same { token, user } shape as login() so the caller is signed straight in. Shared
+// by self-service registration and the createOwner bootstrap script. Callers own PIN
+// policy (register enforces 6 digits; bootstrap allows 4–6); a duplicate username
+// surfaces as Prisma P2002 → 409 via the error handler.
+export async function createShopWithOwner(input: {
+  shopName: string;
+  ownerName: string;
+  username: string;
+  pin: string;
+}): Promise<{ token: string; user: AuthUser }> {
+  const passwordHash = await hashPin(input.pin);
+
+  const owner = await prisma.$transaction(async (tx) => {
+    const shop = await tx.shop.create({ data: { name: input.shopName } });
+    return tx.user.create({
+      data: {
+        shopId: shop.id,
+        name: input.ownerName,
+        username: input.username,
+        passwordHash,
+        role: UserRole.OWNER,
+      },
+    });
+  });
+
+  const authUser: AuthUser = { id: owner.id, shopId: owner.shopId, name: owner.name, role: owner.role };
   return { token: signToken(authUser), user: authUser };
 }

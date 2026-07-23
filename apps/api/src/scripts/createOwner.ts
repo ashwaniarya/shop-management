@@ -1,7 +1,5 @@
-import { UserRole } from '@prisma/client';
-import bcrypt from 'bcryptjs';
-
 import { prisma } from '../lib/prisma';
+import { createShopWithOwner } from '../services/auth';
 
 // Idempotent first-owner bootstrap for a fresh deployment. Auth is mandatory and
 // login needs a bcrypt passwordHash that no migration creates, so a migrated-but-
@@ -9,7 +7,6 @@ import { prisma } from '../lib/prisma';
 // and one OWNER from environment variables. It is safe to re-run: it no-ops the
 // moment any user exists, and it never deletes data (unlike the dev seed).
 
-const SALT_ROUNDS = 10;
 const PIN_PATTERN = /^\d{4,6}$/;
 
 async function bootstrapOwner(): Promise<void> {
@@ -31,22 +28,9 @@ async function bootstrapOwner(): Promise<void> {
     return;
   }
 
-  const passwordHash = await bcrypt.hash(pin, SALT_ROUNDS);
+  const { user } = await createShopWithOwner({ shopName, ownerName, username, pin });
 
-  const owner = await prisma.$transaction(async (tx) => {
-    const shop = await tx.shop.create({ data: { name: shopName } });
-    return tx.user.create({
-      data: {
-        shopId: shop.id,
-        name: ownerName,
-        username,
-        passwordHash,
-        role: UserRole.OWNER,
-      },
-    });
-  });
-
-  console.log(`[bootstrap-owner] Created shop "${shopName}" and OWNER "${username}" (user #${owner.id}).`);
+  console.log(`[bootstrap-owner] Created shop "${shopName}" and OWNER "${username}" (user #${user.id}).`);
 }
 
 bootstrapOwner()

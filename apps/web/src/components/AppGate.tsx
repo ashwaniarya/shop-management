@@ -8,18 +8,21 @@ import { LoadingBlock } from '@/components/ui/LoadingRow';
 import { useAuth } from '@/context/AuthContext';
 import { ShopProvider } from '@/context/ShopContext';
 
+// Reachable while signed out — everything else redirects to /login.
+const PUBLIC_PATHS = new Set(['/login', '/register']);
+
 export function AppGate({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, isLoading } = useAuth();
 
   useEffect(() => {
-    if (!isLoading && !user && pathname !== '/login') {
+    if (!isLoading && !user && !PUBLIC_PATHS.has(pathname)) {
       router.replace('/login');
     }
   }, [isLoading, user, pathname, router]);
 
-  if (pathname === '/login') {
+  if (PUBLIC_PATHS.has(pathname)) {
     return <>{children}</>;
   }
 

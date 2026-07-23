@@ -24,6 +24,7 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "4",
+    "express-rate-limit": "^7.4.0",
     "jsonwebtoken": "^9.0.3",
     "swagger-ui-express": "^5.0.1",
     "yaml": "^2.6.0",
