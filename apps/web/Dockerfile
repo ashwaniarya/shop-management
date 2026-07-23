@@ -9,10 +9,13 @@ COPY . .
 
 RUN pnpm install --frozen-lockfile
 
-# Next inlines NEXT_PUBLIC_* into the client bundle at BUILD time. Railway build-time
-# variables are only visible when declared as ARG, so declare it before the build.
+# Next inlines NEXT_PUBLIC_* into the client bundle, and bakes rewrite destinations
+# into the routes manifest, at BUILD time. Railway build-time variables are only
+# visible when declared as ARG, so declare them before the build.
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ARG API_PROXY_TARGET
+ENV API_PROXY_TARGET=$API_PROXY_TARGET
 RUN pnpm --filter web build
 
 ENV NODE_ENV=production
