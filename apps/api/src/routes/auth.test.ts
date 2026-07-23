@@ -171,6 +171,7 @@ describe('auth router', () => {
       });
 
       expect(response.status).toBe(409);
+      expect(response.body.error.message).toMatch(/already taken/i);
     });
 
     it('returns 400 for a pin that is not exactly 6 digits', async () => {

@@ -1,10 +1,10 @@
 import type { AuthUser } from '@shop/shared';
-import { UserRole } from '@prisma/client';
+import { Prisma, UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
 import { prisma } from '../lib/prisma';
-import { UnauthorizedError } from './errors';
+import { ConflictError, UnauthorizedError } from './errors';
 
 const SALT_ROUNDS = 10;
 
@@ -75,19 +75,27 @@ export async function createShopWithOwner(input: {
 }): Promise<{ token: string; user: AuthUser }> {
   const passwordHash = await hashPin(input.pin);
 
-  const owner = await prisma.$transaction(async (tx) => {
-    const shop = await tx.shop.create({ data: { name: input.shopName } });
-    return tx.user.create({
-      data: {
-        shopId: shop.id,
-        name: input.ownerName,
-        username: input.username,
-        passwordHash,
-        role: UserRole.OWNER,
-      },
+  try {
+    const owner = await prisma.$transaction(async (tx) => {
+      const shop = await tx.shop.create({ data: { name: input.shopName } });
+      return tx.user.create({
+        data: {
+          shopId: shop.id,
+          name: input.ownerName,
+          username: input.username,
+          passwordHash,
+          role: UserRole.OWNER,
+        },
+      });
     });
-  });
 
-  const authUser: AuthUser = { id: owner.id, shopId: owner.shopId, name: owner.name, role: owner.role };
-  return { token: signToken(authUser), user: authUser };
+    const authUser: AuthUser = { id: owner.id, shopId: owner.shopId, name: owner.name, role: owner.role };
+    return { token: signToken(authUser), user: authUser };
+  } catch (error) {
+    // Usernames are globally unique; translate the raw unique-violation into a clear message.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      throw new ConflictError('That username is already taken');
+    }
+    throw error;
+  }
 }
