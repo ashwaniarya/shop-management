@@ -12,6 +12,7 @@ interface AuthContextValue {
   isLoading: boolean;
   login: (username: string, pin: string) => Promise<void>;
   register: (input: Register) => Promise<void>;
+  adoptToken: (token: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -50,6 +51,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(authUser);
   }, []);
 
+  // Used by the OAuth callback: the token was minted by the API during the redirect,
+  // so the only thing left is to store it and resolve who it belongs to.
+  const adoptToken = useCallback(async (token: string) => {
+    setAuthToken(token);
+    try {
+      setUser(await getMe());
+    } catch (error) {
+      clearAuthToken();
+      throw error;
+    }
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       await apiLogout();
@@ -62,7 +75,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ user, isLoading, login, register, adoptToken, logout }}>
+      {children}
+    </AuthContext.Provider>
   );
 }
 

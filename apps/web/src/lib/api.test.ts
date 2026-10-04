@@ -1,6 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ApiError, decideUnauthorizedAction, del, get, listShops, post, register } from './api';
+import {
+  ApiError,
+  buildOAuthStartUrl,
+  decideUnauthorizedAction,
+  del,
+  get,
+  listOAuthProviders,
+  listShops,
+  post,
+  register,
+} from './api';
 
 function mockFetchOnce(response: { ok: boolean; status: number; json?: () => Promise<unknown> }) {
   const fetchMock = vi.fn().mockResolvedValue({
@@ -166,5 +176,23 @@ describe('api client', () => {
     expect(calledUrl).toBe('http://localhost:4000/api/v1/auth/register');
     expect(requestInit.method).toBe('POST');
     expect(requestInit.body).toBe(JSON.stringify(body));
+  });
+});
+
+describe('oauth', () => {
+  it('fetches the enabled providers from /auth/oauth/providers', async () => {
+    const providers = { data: [{ id: 'google', label: 'Google' }] };
+    const fetchMock = mockFetchOnce({ ok: true, status: 200, json: () => Promise.resolve(providers) });
+
+    const result = await listOAuthProviders();
+
+    expect(result).toEqual(providers);
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:4000/api/v1/auth/oauth/providers');
+  });
+
+  // Must be an absolute URL: the browser navigates to it, so a bare path would hit the
+  // web app instead of the API whenever the two are on different origins.
+  it('builds an absolute start URL for a provider', () => {
+    expect(buildOAuthStartUrl('google')).toBe('http://localhost:4000/api/v1/auth/oauth/google/start');
   });
 });

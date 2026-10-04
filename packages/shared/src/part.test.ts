@@ -15,6 +15,27 @@ describe('partCreateSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('accepts a body with no sku (the server auto-generates one)', () => {
+    const result = partCreateSchema.safeParse({
+      manufacturerId: 1,
+      manufacturerPartNumber: 'MPN-1',
+      name: 'Test Part',
+      categoryId: 1,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('still rejects an explicitly empty sku', () => {
+    const result = partCreateSchema.safeParse({
+      sku: '',
+      manufacturerId: 1,
+      manufacturerPartNumber: 'MPN-1',
+      name: 'Test Part',
+      categoryId: 1,
+    });
+    expect(result.success).toBe(false);
+  });
+
   it('defaults unitOfMeasure to piece when omitted', () => {
     const result = partCreateSchema.parse({
       sku: 'SKU-1',

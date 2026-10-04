@@ -33,16 +33,26 @@ railway domain --service web --port 8080     # -> https://<web-domain>
 #    - ALLOWED_ORIGINS: the EXACT web origin — https, no trailing slash, no path
 #      (CORS is exact-string matched; a mismatch breaks the browser UI while curl still works).
 #    - BOOTSTRAP_OWNER_*: the first-owner login, created once on first boot (idempotent).
+#    - WEB_APP_URL: where the OAuth callback sends the browser, and the origin the
+#      provider redirect URI is built from. Same value as ALLOWED_ORIGINS.
 #    - PORT=8080 matches the domain target port.
 railway variables --service api \
   --set 'RAILWAY_DOCKERFILE_PATH=apps/api/Dockerfile' \
   --set 'DATABASE_URL=${{Postgres.DATABASE_URL}}' \
   --set 'ALLOWED_ORIGINS=https://<web-domain>' \
+  --set 'WEB_APP_URL=https://<web-domain>' \
   --set "JWT_SECRET=$(openssl rand -hex 32)" \
   --set 'BOOTSTRAP_OWNER_USERNAME=owner' \
   --set 'BOOTSTRAP_OWNER_PIN=<choose 4-6 digits>' \
   --set 'BOOTSTRAP_SHOP_NAME=Demo Shop' \
   --set 'PORT=8080'
+
+# 3b. (optional) Sign in with Google — read at REQUEST time, so this is a plain redeploy,
+#     and the button simply doesn't render until both values are present.
+#     Full walkthrough: docs/oauth-setup.md
+# railway variables --service api \
+#   --set 'GOOGLE_CLIENT_ID=<client id>' \
+#   --set 'GOOGLE_CLIENT_SECRET=<client secret>'
 
 # 4. web service configuration
 #    NEXT_PUBLIC_API_URL is read at BUILD time (Docker ARG in apps/web/Dockerfile) and

@@ -2,15 +2,17 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { loginSchema } from '@shop/shared';
 
+import { SocialSignIn } from '@/components/SocialSignIn';
 import { Button } from '@/components/ui/Button';
 import { FormError } from '@/components/ui/FormError';
 import { Input } from '@/components/ui/Input';
 import { useAuth } from '@/context/AuthContext';
 import { useZodSubmit } from '@/hooks/useZodSubmit';
+import { describeOAuthError } from '@/lib/oauth';
 
 function BrandMark() {
   return (
@@ -32,6 +34,17 @@ export default function LoginPage() {
 
   const [username, setUsername] = useState('');
   const [pin, setPin] = useState('');
+  const [oauthError, setOauthError] = useState<string | null>(null);
+
+  // Read from window rather than useSearchParams: that hook forces this page into a
+  // Suspense boundary at build time, and the value is only needed after hydration.
+  useEffect(() => {
+    const errorCode = new URLSearchParams(window.location.search).get('error');
+    if (errorCode) {
+      setOauthError(describeOAuthError(errorCode));
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
 
   const { fieldErrors, submitError, isSubmitting, run } = useZodSubmit(
     loginSchema,
@@ -59,6 +72,12 @@ export default function LoginPage() {
           <span className="animate-skeleton h-1.5 w-1.5 rounded-full bg-positive-500" />
           <span className="font-mono text-[10px] tracking-[0.16em] text-ink-500 uppercase">Terminal ready</span>
         </div>
+
+        {oauthError ? (
+          <div className="mb-4 rounded-sm border border-accent-800 bg-accent-950 px-3 py-2 text-center">
+            <FormError error={oauthError} />
+          </div>
+        ) : null}
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <Input
@@ -91,6 +110,8 @@ export default function LoginPage() {
             <FormError error={submitError} />
           </div>
         </form>
+
+        <SocialSignIn label="Sign in with" />
 
         <p className="mt-5 text-center text-xs text-ink-400">
           New here?{' '}

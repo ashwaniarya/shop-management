@@ -6,6 +6,7 @@ import { useState } from 'react';
 
 import { registerSchema } from '@shop/shared';
 
+import { SocialSignIn } from '@/components/SocialSignIn';
 import { Button } from '@/components/ui/Button';
 import { FormError } from '@/components/ui/FormError';
 import { Input } from '@/components/ui/Input';
@@ -107,6 +108,8 @@ export default function RegisterPage() {
             <FormError error={submitError} />
           </div>
         </form>
+
+        <SocialSignIn label="Continue with" />
 
         <p className="mt-5 text-center text-xs text-ink-400">
           Already have an account?{' '}

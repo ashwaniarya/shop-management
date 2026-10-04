@@ -9,6 +9,7 @@ import type {
   InvoiceDetail,
   InvoiceListItem,
   LoginResponse,
+  OAuthProvider,
   Register,
   Manufacturer,
   ManufacturerCreate,
@@ -274,6 +275,17 @@ export function register(input: Register): Promise<LoginResponse> {
 
 export function getMe(): Promise<AuthUser> {
   return get<AuthUser>('/auth/me');
+}
+
+export function listOAuthProviders(): Promise<{ data: OAuthProvider[] }> {
+  return get<{ data: OAuthProvider[] }>('/auth/oauth/providers');
+}
+
+// Not fetched: the browser has to navigate to the provider, so this URL is used as a
+// link target. Full origin (not a bare path) so it works whether the API is proxied
+// through the web app or served from its own domain.
+export function buildOAuthStartUrl(providerId: string): string {
+  return `${API_BASE_URL}${API_PREFIX}/auth/oauth/${providerId}/start`;
 }
 
 export function logout(): Promise<void> {

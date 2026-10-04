@@ -106,6 +106,93 @@ paths:
           description: The requested username is already taken.
         '429':
           description: Too many sign-up attempts (rate-limited).
+  /api/v1/auth/oauth/providers:
+    get:
+      operationId: listOAuthProviders
+      summary: List the enabled social sign-in providers
+      description: >-
+        Returns only providers whose client credentials are configured on the server,
+        so the sign-in screen can render a button per entry and nothing when empty.
+      tags: ["Auth"]
+      security: []
+      responses:
+        '200':
+          description: The enabled providers.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OAuthProvider'
+  /api/v1/auth/oauth/{provider}/start:
+    get:
+      operationId: startOAuthSignIn
+      summary: Begin the OAuth 2.0 / OIDC authorization code flow
+      description: >-
+        Redirects the browser to the provider's consent screen with PKCE, `state` and
+        `nonce`. Those three values are signed into a short-lived HttpOnly cookie that
+        the callback verifies. Intended for top-level browser navigation, not XHR.
+      tags: ["Auth"]
+      security: []
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+          example: google
+      responses:
+        '302':
+          description: Redirect to the identity provider's authorization endpoint.
+        '404':
+          description: The provider is unknown or has no credentials configured.
+        '429':
+          description: Too many sign-in attempts (rate-limited).
+  /api/v1/auth/oauth/{provider}/callback:
+    get:
+      operationId: completeOAuthSignIn
+      summary: Complete the OAuth flow and hand back a session token
+      description: >-
+        Exchanges the authorization code, verifies the ID token, then resolves the
+        account (existing identity, link by provider-verified email, or a brand-new
+        shop with an OWNER). Always answers with a redirect, never a JSON body:
+        success goes to `/auth/callback#token=<jwt>` on the web app — the token rides
+        in the fragment so it never reaches a server log — and any failure goes to
+        `/login?error=<code>`.
+      tags: ["Auth"]
+      security: []
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+          example: google
+        - name: code
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: error
+          in: query
+          required: false
+          description: Set by the provider when the user declines consent.
+          schema:
+            type: string
+      responses:
+        '302':
+          description: >-
+            Redirect to the web app — with the token in the fragment on success, or to
+            `/login?error=access_denied|session_expired|provider_unavailable|sign_in_failed`.
   /api/v1/auth/me:
     get:
       operationId: getCurrentUser
@@ -878,10 +965,10 @@ paths:
       summary: Create a part
       tags: ["Parts"]
       description: >-
-        Responds 409 if a part with this `sku`, or this `manufacturerId` +
-        `manufacturerPartNumber` pair, already exists. Responds 400 when
-        `copyOfPartId` names a part that is itself a copy (copy families are
-        one level deep). Cross-manufacturer copy links are allowed.
+        Omit `sku` to have the server auto-generate a unique one. Responds 409 if a
+        supplied `sku`, or this `manufacturerId` + `manufacturerPartNumber` pair,
+        already exists. Responds 400 when `copyOfPartId` names a part that is itself a
+        copy (copy families are one level deep). Cross-manufacturer copy links are allowed.
       requestBody:
         required: true
         content:
@@ -1894,6 +1981,18 @@ components:
         pin:
           type: string
           description: Exactly 6 digits.
+    OAuthProvider:
+      type: object
+      required: [id, label]
+      properties:
+        id:
+          type: string
+          description: Path segment used in the OAuth start and callback URLs.
+          example: google
+        label:
+          type: string
+          description: Display name for the sign-in button.
+          example: Google
     LoginResponse:
       type: object
       required: [token, user]
@@ -2322,10 +2421,15 @@ components:
           format: date-time
     PartCreate:
       type: object
-      required: [sku, manufacturerId, manufacturerPartNumber, name, categoryId]
+      required: [manufacturerId, manufacturerPartNumber, name, categoryId]
       properties:
         sku:
           type: string
+          minLength: 1
+          description: >-
+            Optional. Omit it and the server auto-generates a unique, readable SKU
+            (a manufacturer-code prefix, or PRT, plus a short unambiguous suffix). A
+            supplied value must be non-empty and unique.
         manufacturerId:
           type: integer
         manufacturerPartNumber:
