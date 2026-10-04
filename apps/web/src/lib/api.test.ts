@@ -5,6 +5,7 @@ import {
   buildOAuthStartUrl,
   decideUnauthorizedAction,
   del,
+  exchangeOAuthSession,
   get,
   listOAuthProviders,
   listShops,
@@ -36,6 +37,23 @@ describe('decideUnauthorizedAction', () => {
 
   it('clears the token but does not redirect when already on /login (avoids a reload loop)', () => {
     expect(decideUnauthorizedAction('GET', '/auth/me', '/login')).toEqual({ clearToken: true, redirect: false });
+  });
+
+  // The callback page sends its own failures to /login with an error code; a bare
+  // redirect would race it and drop the code.
+  it('clears the token but does not redirect from the OAuth callback page', () => {
+    expect(decideUnauthorizedAction('GET', '/auth/me', '/auth/callback')).toEqual({
+      clearToken: true,
+      redirect: false,
+    });
+  });
+
+  // Otherwise a link to /auth/callback with no handoff waiting would sign the user out.
+  it('keeps the stored token when the OAuth handoff exchange is refused', () => {
+    expect(decideUnauthorizedAction('POST', '/auth/oauth/session', '/auth/callback')).toEqual({
+      clearToken: false,
+      redirect: false,
+    });
   });
 });
 
@@ -190,9 +208,37 @@ describe('oauth', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:4000/api/v1/auth/oauth/providers');
   });
 
-  // Must be an absolute URL: the browser navigates to it, so a bare path would hit the
-  // web app instead of the API whenever the two are on different origins.
-  it('builds an absolute start URL for a provider', () => {
-    expect(buildOAuthStartUrl('google')).toBe('http://localhost:4000/api/v1/auth/oauth/google/start');
+  // Must stay relative even when NEXT_PUBLIC_API_URL names another host: the transaction
+  // cookie /start sets has to land on the web origin, where the callback is served.
+  it('builds a same-origin relative start URL for a provider', () => {
+    expect(buildOAuthStartUrl('google')).toBe('/api/v1/auth/oauth/google/start');
+  });
+
+  describe('exchangeOAuthSession', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    // Relative, never the API base URL: the handoff cookie lives on the web origin.
+    it('POSTs to the same-origin handoff path and returns the token', async () => {
+      const fetchMock = mockFetchOnce({ ok: true, status: 200, json: () => Promise.resolve({ token: 'jwt-token' }) });
+
+      const token = await exchangeOAuthSession();
+
+      expect(token).toBe('jwt-token');
+      const [calledUrl, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(calledUrl).toBe('/api/v1/auth/oauth/session');
+      expect(requestInit.method).toBe('POST');
+    });
+
+    it('rejects with an ApiError when no sign-in is waiting', async () => {
+      mockFetchOnce({
+        ok: false,
+        status: 401,
+        json: () => Promise.resolve({ error: { code: 'UNAUTHORIZED', message: 'No sign-in is waiting' } }),
+      });
+
+      await expect(exchangeOAuthSession()).rejects.toMatchObject({ status: 401, code: 'UNAUTHORIZED' });
+    });
   });
 });

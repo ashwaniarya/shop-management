@@ -14,6 +14,15 @@ const OAUTH_TRANSACTION_AUDIENCE = 'oauth-transaction';
 // Scoped to the OAuth routes so it is never attached to ordinary API calls.
 const OAUTH_COOKIE_PATH = '/api/v1/auth/oauth';
 
+// Carries the freshly minted session token from the callback redirect to the one POST
+// that claims it. The token never appears in a URL, so a link cannot plant one.
+export const OAUTH_SESSION_COOKIE = 'oauth_session';
+
+// Only has to outlive the redirect to /auth/callback and the page's immediate POST.
+const OAUTH_SESSION_TTL_SECONDS = 60;
+
+const OAUTH_SESSION_COOKIE_PATH = '/api/v1/auth/oauth/session';
+
 export interface OAuthTransaction {
   provider: string;
   state: string;
@@ -51,14 +60,23 @@ export function verifyOAuthTransaction(token: string): OAuthTransaction {
   return payload;
 }
 
-export function oauthTransactionCookieOptions(): CookieOptions {
+function buildOAuthCookieOptions(path: string, ttlSeconds: number): CookieOptions {
   return {
     httpOnly: true,
     // Lax, not Strict: the provider sends the user back via a top-level cross-site GET,
-    // and Strict would withhold the cookie on exactly that navigation.
+    // and Strict would withhold the transaction cookie on exactly that navigation. Lax
+    // still withholds both cookies from cross-site POSTs.
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
-    path: OAUTH_COOKIE_PATH,
-    maxAge: OAUTH_TRANSACTION_TTL_SECONDS * 1000,
+    path,
+    maxAge: ttlSeconds * 1000,
   };
+}
+
+export function oauthTransactionCookieOptions(): CookieOptions {
+  return buildOAuthCookieOptions(OAUTH_COOKIE_PATH, OAUTH_TRANSACTION_TTL_SECONDS);
+}
+
+export function oauthSessionCookieOptions(): CookieOptions {
+  return buildOAuthCookieOptions(OAUTH_SESSION_COOKIE_PATH, OAUTH_SESSION_TTL_SECONDS);
 }

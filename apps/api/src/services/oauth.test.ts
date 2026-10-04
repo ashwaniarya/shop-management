@@ -126,7 +126,7 @@ describe('signInWithOAuthProfile', () => {
     const shop = await prisma.shop.create({ data: { name: `OAuth Unverified Shop ${ts}` } });
     createdShopIds.push(shop.id);
     const victimUser = await prisma.user.create({
-      data: { shopId: shop.id, name: 'Victim Owner', email, role: UserRole.OWNER },
+      data: { shopId: shop.id, name: 'Victim Owner', email, verifiedEmail: email, role: UserRole.OWNER },
     });
     createdUserIds.push(victimUser.id);
 
@@ -157,6 +157,100 @@ describe('signInWithOAuthProfile', () => {
     await prisma.user.update({ where: { id: first.user.id }, data: { isActive: false } });
 
     await expect(signInWithOAuthProfile(PROVIDER, profile)).rejects.toThrow(/deactivated/i);
+  });
+
+  // Recycled-address takeover regression. Providers re-issue a deleted account's address
+  // to a new person under a new subject id; matching on the address alone would hand
+  // that newcomer the previous owner's shop.
+  it('does NOT link a verified address whose account already has a different subject for this provider', async () => {
+    const email = `oauth-recycled-${ts}@example.com`;
+    const originalSubject = `google-sub-recycled-original-${ts}`;
+    const shop = await prisma.shop.create({ data: { name: `OAuth Recycled Shop ${ts}` } });
+    createdShopIds.push(shop.id);
+    const originalOwner = await prisma.user.create({
+      data: {
+        shopId: shop.id,
+        name: 'Original Owner',
+        email,
+        verifiedEmail: email,
+        role: UserRole.OWNER,
+        identities: { create: { provider: PROVIDER, providerUserId: originalSubject, email } },
+      },
+    });
+    createdUserIds.push(originalOwner.id);
+
+    const result = await trackSignIn(
+      await signInWithOAuthProfile(PROVIDER, profileFor('recycled-newcomer', { email, emailVerified: true })),
+    );
+
+    expect(result.user.id).not.toBe(originalOwner.id);
+    expect(result.user.shopId).not.toBe(shop.id);
+    const newcomer = await prisma.user.findUnique({ where: { id: result.user.id } });
+    expect(newcomer?.verifiedEmail).toBeNull();
+    const originalGoogleIdentities = await prisma.userIdentity.findMany({
+      where: { userId: originalOwner.id, provider: PROVIDER },
+    });
+    expect(originalGoogleIdentities.map((identity) => identity.providerUserId)).toEqual([originalSubject]);
+  });
+
+  it('rejects linking to a deactivated account without recording the identity', async () => {
+    const email = `oauth-inactive-link-${ts}@example.com`;
+    const shop = await prisma.shop.create({ data: { name: `OAuth Inactive Link Shop ${ts}` } });
+    createdShopIds.push(shop.id);
+    const deactivatedUser = await prisma.user.create({
+      data: { shopId: shop.id, name: 'Deactivated Owner', email, verifiedEmail: email, role: UserRole.OWNER, isActive: false },
+    });
+    createdUserIds.push(deactivatedUser.id);
+    const profile = profileFor('inactive-link', { email, emailVerified: true });
+
+    await expect(signInWithOAuthProfile(PROVIDER, profile)).rejects.toThrow(/deactivated/i);
+
+    expect(
+      await prisma.userIdentity.count({ where: { provider: PROVIDER, providerUserId: profile.providerUserId } }),
+    ).toBe(0);
+  });
+
+  it('links a verified address across providers when the account has no identity for this one', async () => {
+    const email = `oauth-cross-provider-${ts}@example.com`;
+    const shop = await prisma.shop.create({ data: { name: `OAuth Cross Provider Shop ${ts}` } });
+    createdShopIds.push(shop.id);
+    const existingUser = await prisma.user.create({
+      data: {
+        shopId: shop.id,
+        name: 'Cross Provider Owner',
+        email,
+        verifiedEmail: email,
+        role: UserRole.OWNER,
+        identities: { create: { provider: 'microsoft', providerUserId: `microsoft-sub-cross-${ts}`, email } },
+      },
+    });
+    createdUserIds.push(existingUser.id);
+    const profile = profileFor('cross-provider', { email, emailVerified: true });
+
+    const result = await signInWithOAuthProfile(PROVIDER, profile);
+
+    expect(result.user.id).toBe(existingUser.id);
+    const googleIdentities = await prisma.userIdentity.findMany({ where: { userId: existingUser.id, provider: PROVIDER } });
+    expect(googleIdentities.map((identity) => identity.providerUserId)).toEqual([profile.providerUserId]);
+  });
+
+  it('lands both racing first sign-ins of one identity on the linked account', async () => {
+    const email = `oauth-link-race-${ts}@example.com`;
+    const shop = await prisma.shop.create({ data: { name: `OAuth Link Race Shop ${ts}` } });
+    createdShopIds.push(shop.id);
+    const existingUser = await prisma.user.create({
+      data: { shopId: shop.id, name: 'Race Owner', email, verifiedEmail: email, role: UserRole.OWNER },
+    });
+    createdUserIds.push(existingUser.id);
+    const profile = profileFor('link-race', { email, emailVerified: true });
+
+    const results = await Promise.all([
+      signInWithOAuthProfile(PROVIDER, profile),
+      signInWithOAuthProfile(PROVIDER, profile),
+    ]);
+
+    expect(results.map((result) => result.user.id)).toEqual([existingUser.id, existingUser.id]);
+    expect(await prisma.userIdentity.count({ where: { userId: existingUser.id } })).toBe(1);
   });
 
   it('falls back to the email local-part when the provider sends no name', async () => {

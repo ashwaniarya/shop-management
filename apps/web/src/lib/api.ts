@@ -110,9 +110,12 @@ function buildQueryString(params?: QueryParams): string {
 interface RequestOptions {
   query?: QueryParams;
   body?: unknown;
+  sameOrigin?: boolean;
 }
 
 const LOGIN_PATH = '/auth/login';
+const OAUTH_SESSION_PATH = '/auth/oauth/session';
+const PAGES_THAT_HANDLE_THEIR_OWN_UNAUTHORIZED = ['/login', '/auth/callback'];
 
 function buildRequestHeaders(hasBody: boolean): HeadersInit | undefined {
   const headers: Record<string, string> = {};
@@ -128,18 +131,21 @@ function buildRequestHeaders(hasBody: boolean): HeadersInit | undefined {
 
 // A 401 means the stored token is missing/expired/invalid, except on the login
 // call itself (a 401 there just means "wrong username/PIN" and must surface as
-// a normal ApiError to the login form). Everywhere else, drop the dead token and
-// hard-redirect to /login — skipping the redirect when already there avoids a
-// reload loop if some in-flight request 401s right as the login page mounts.
+// a normal ApiError to the login form) and on the OAuth handoff exchange (a 401
+// there means no sign-in was waiting; dropping the token would let any link to
+// /auth/callback sign the user out). Everywhere else, drop the dead token and
+// hard-redirect to /login, but not from /login itself (a reload loop if some
+// in-flight request 401s right as the page mounts) nor from /auth/callback, which
+// sends its own failures to /login with an error code a bare redirect would drop.
 export function decideUnauthorizedAction(
   method: string,
   path: string,
   currentPathname: string,
 ): { clearToken: boolean; redirect: boolean } {
-  if (method === 'POST' && path === LOGIN_PATH) {
+  if (method === 'POST' && (path === LOGIN_PATH || path === OAUTH_SESSION_PATH)) {
     return { clearToken: false, redirect: false };
   }
-  return { clearToken: true, redirect: currentPathname !== '/login' };
+  return { clearToken: true, redirect: !PAGES_THAT_HANDLE_THEIR_OWN_UNAUTHORIZED.includes(currentPathname) };
 }
 
 function handleUnauthorizedResponse(method: string, path: string): void {
@@ -154,7 +160,8 @@ function handleUnauthorizedResponse(method: string, path: string): void {
 }
 
 async function request<T>(method: string, path: string, options: RequestOptions = {}): Promise<T> {
-  const url = `${API_BASE_URL}${API_PREFIX}${path}${buildQueryString(options.query)}`;
+  const baseUrl = options.sameOrigin ? '' : API_BASE_URL;
+  const url = `${baseUrl}${API_PREFIX}${path}${buildQueryString(options.query)}`;
 
   let response: Response;
   try {
@@ -281,11 +288,18 @@ export function listOAuthProviders(): Promise<{ data: OAuthProvider[] }> {
   return get<{ data: OAuthProvider[] }>('/auth/oauth/providers');
 }
 
-// Not fetched: the browser has to navigate to the provider, so this URL is used as a
-// link target. Full origin (not a bare path) so it works whether the API is proxied
-// through the web app or served from its own domain.
+// Not fetched: the browser navigates to it as a link target. Deliberately relative, never
+// API_BASE_URL: /start sets the transaction cookie on whatever host serves it, and the
+// callback is registered on the web origin (proxied to the API), so /start must be too.
 export function buildOAuthStartUrl(providerId: string): string {
-  return `${API_BASE_URL}${API_PREFIX}/auth/oauth/${providerId}/start`;
+  return `${API_PREFIX}/auth/oauth/${providerId}/start`;
+}
+
+// Same-origin for the same reason: the callback left the handoff cookie on the web
+// origin, so only a request to that origin carries it.
+export async function exchangeOAuthSession(): Promise<string> {
+  const { token } = await request<Pick<LoginResponse, 'token'>>('POST', OAUTH_SESSION_PATH, { sameOrigin: true });
+  return token;
 }
 
 export function logout(): Promise<void> {

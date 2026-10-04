@@ -134,13 +134,17 @@ function toAuthUser(user: { id: number; shopId: number; name: string; role: User
   return { id: user.id, shopId: user.shopId, name: user.name, role: user.role };
 }
 
+function assertAccountActive(user: { isActive: boolean }): void {
+  if (!user.isActive) {
+    throw new UnauthorizedError('This account has been deactivated');
+  }
+}
+
 function signInAs(user: { id: number; shopId: number; name: string; role: UserRole; isActive: boolean }): {
   token: string;
   user: AuthUser;
 } {
-  if (!user.isActive) {
-    throw new UnauthorizedError('This account has been deactivated');
-  }
+  assertAccountActive(user);
   const authUser = toAuthUser(user);
   return { token: signToken(authUser), user: authUser };
 }
@@ -189,6 +193,18 @@ async function findUserByIdentity(providerId: string, providerUserId: string) {
   return identity?.user;
 }
 
+// Two first-time sign-ins racing on the same identity: the unique index rejects the
+// loser, whose account already exists by now, so re-read it instead of failing.
+async function recoverFromIdentityRace(providerId: string, providerUserId: string, error: unknown) {
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+    const racedUser = await findUserByIdentity(providerId, providerUserId);
+    if (racedUser) {
+      return signInAs(racedUser);
+    }
+  }
+  throw error;
+}
+
 // Resolves an external identity to an app session, creating or linking an account as
 // needed, and returns the same { token, user } shape as password login so every caller
 // downstream (RBAC, /auth/me) is unchanged.
@@ -208,27 +224,37 @@ export async function signInWithOAuthProfile(
   // shop, plant a stranger's address on a user in it, and capture that person's first
   // social sign-in into their shop.
   const verifiedEmail = profile.emailVerified ? normalizeEmail(profile.email) : null;
-  if (verifiedEmail) {
-    const userWithSameEmail = await prisma.user.findUnique({ where: { verifiedEmail } });
-    if (userWithSameEmail) {
+  const userWithSameEmail = verifiedEmail
+    ? await prisma.user.findUnique({
+        where: { verifiedEmail },
+        include: { identities: { where: { provider: providerId }, select: { id: true } } },
+      })
+    : null;
+
+  // Providers recycle addresses: a deleted account's address can be re-issued to a new
+  // person under a new subject id. No identity matched this subject above, so an account
+  // that already has one for this provider belongs to someone else, and the newcomer
+  // gets a shop of their own instead of the previous owner's.
+  const emailClaimedByAnotherSubject = (userWithSameEmail?.identities.length ?? 0) > 0;
+
+  if (userWithSameEmail && !emailClaimedByAnotherSubject) {
+    // Checked before writing so a deactivated account is never bound to a new subject.
+    assertAccountActive(userWithSameEmail);
+    try {
       await prisma.userIdentity.create({
         data: { userId: userWithSameEmail.id, provider: providerId, providerUserId: profile.providerUserId, email: profile.email },
       });
       return signInAs(userWithSameEmail);
+    } catch (error) {
+      return recoverFromIdentityRace(providerId, profile.providerUserId, error);
     }
   }
 
+  // verifiedEmail is unique and still belongs to the previous owner.
+  const newOwnerVerifiedEmail = emailClaimedByAnotherSubject ? null : verifiedEmail;
   try {
-    return signInAs(await createShopWithOAuthOwner(providerId, profile, verifiedEmail));
+    return signInAs(await createShopWithOAuthOwner(providerId, profile, newOwnerVerifiedEmail));
   } catch (error) {
-    // Two first-time sign-ins racing on the same identity: the unique index rejects the
-    // loser, whose account already exists by now, so re-read it instead of failing.
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      const racedUser = await findUserByIdentity(providerId, profile.providerUserId);
-      if (racedUser) {
-        return signInAs(racedUser);
-      }
-    }
-    throw error;
+    return recoverFromIdentityRace(providerId, profile.providerUserId, error);
   }
 }

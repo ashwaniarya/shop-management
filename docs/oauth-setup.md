@@ -38,7 +38,9 @@ personal-scope app.
 
 > The redirect URI points at the **web** origin, not the API's. The Next server
 > reverse-proxies `/api/v1/*` to the API, which keeps the whole flow on one domain —
-> the same single-origin setup that fixed the mobile DNS failures.
+> the same single-origin setup that fixed the mobile DNS failures. It has to: the
+> sign-in transaction cookie is set on the web origin, and `*.up.railway.app` is a public
+> suffix, so a callback on the API's subdomain would never receive it.
 
 ## 2. Set the variables
 
@@ -59,8 +61,19 @@ railway variables --service api --skip-deploys \
   --set "GOOGLE_CLIENT_SECRET=<client secret>"
 ```
 
-These are read at **request** time, not build time, so only the api service needs them
-and a plain redeploy is enough.
+The provider credentials are read at **request** time, not build time, so only the api
+service needs them and a plain redeploy is enough.
+
+- **`WEB_APP_URL` is required in production** once any provider is enabled. The redirect
+  URI and every post-login redirect are built from it, so the api **refuses to boot**
+  with `NODE_ENV=production`, a provider configured, and `WEB_APP_URL` unset, rather
+  than silently falling back to `http://localhost:3000`.
+- **`OAUTH_REDIRECT_BASE_URL`** (optional) overrides the base the redirect URI is built
+  from. It must stay on the **web app origin** (same scheme, host and port as
+  `WEB_APP_URL`); the api refuses to boot in production if the origins differ.
+- The **web** service needs nothing OAuth-specific: the sign-in button links to a
+  relative `/api/v1/...` path, so it only has to proxy `/api/v1/*` to the API
+  (`API_PROXY_TARGET`, see [deploy-railway.md](deploy-railway.md) step 4).
 
 ## 3. Verify
 
@@ -95,8 +108,12 @@ sequenceDiagram
     G-->>A: ID token
     A->>A: verify signature/iss/aud/exp/nonce (openid-client)
     A->>A: resolve account → sign app JWT
-    A-->>B: 302 to /auth/callback#token=<jwt>
-    B->>B: read fragment, store token, strip URL
+    A-->>B: 302 to /auth/callback + Set-Cookie oauth_session=<jwt> (60 s, HttpOnly)
+    B->>W: POST /api/v1/auth/oauth/session (handoff cookie rides along)
+    W->>A: proxied
+    A->>A: clear cookie, verify it is a session token
+    A-->>B: 200 { token }
+    B->>B: store token
     B->>W: dashboard
 ```
 
@@ -129,9 +146,14 @@ matching so one mailbox cannot become two accounts. A deactivated user is refuse
 - **ID token verification** (signature, issuer, audience, expiry, nonce) is done by
   [`openid-client`](https://github.com/panva/openid-client), an OpenID-certified library —
   not hand-rolled.
-- The session token comes back in the **URL fragment**, which browsers never send to a
-  server, so it stays out of access logs, proxies and the `Referer` header. The callback
-  page strips it from the address bar immediately.
+- The session token **never appears in a URL**. The callback parks it in an `oauth_session`
+  cookie (HttpOnly, SameSite=Lax, 60-second TTL, `Secure` in production) scoped to
+  `/api/v1/auth/oauth/session`, and the `/auth/callback` page claims it with a same-origin
+  `POST` that clears the cookie whatever the outcome. A page that adopted a token from its
+  own address could be fed an attacker's session by a crafted link (login CSRF), silently
+  putting the victim's data into the attacker's shop; a cookie only the callback response
+  can set rules that out. The `POST` needs no CSRF token: SameSite=Lax keeps the cookie
+  off cross-site POSTs, and CORS never exposes the response to another origin.
 - The start endpoint is rate-limited (20 / 15 min / IP).
 
 ### Adding another provider
@@ -149,7 +171,9 @@ profile-fetch path.
 |---|---|
 | No Google button | Both `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` must be set; check `/api/v1/auth/oauth/providers`. |
 | `redirect_uri_mismatch` from Google | The registered URI differs from `WEB_APP_URL` + `/api/v1/auth/oauth/google/callback` — including scheme and trailing slash. |
-| `?error=session_expired` | The transaction cookie was missing or older than 10 minutes. Just retry. |
+| `?error=session_expired` | The transaction cookie was missing or older than 10 minutes. Just retry. If it happens every time, the callback is not on the web origin: check `OAUTH_REDIRECT_BASE_URL` and the redirect URI registered at Google. |
+| api crash-loops: `WEB_APP_URL must be set …` | A provider is enabled in production without `WEB_APP_URL`. Set it to the web origin. |
+| api crash-loops: `OAUTH_REDIRECT_BASE_URL origin … must match WEB_APP_URL origin` | The override points at another host. Remove it, or put it on the web app origin. |
 | `?error=access_denied` | The person declined consent at Google. |
-| `?error=sign_in_failed` | Code exchange or ID-token verification failed — check the api service logs. |
+| `?error=sign_in_failed` | Code exchange or ID-token verification failed — check the api service logs. If the api logged no failure, the `/auth/callback` page got a 401 from `POST /api/v1/auth/oauth/session`: the handoff cookie expired (over 60 s), was already claimed, or never reached the web origin. |
 | `403 access_denied` at Google | The app is still in **Testing** and the account isn't a listed test user. |

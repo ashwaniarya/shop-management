@@ -1,36 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { describeOAuthError, readTokenFromHash } from './oauth';
-
-describe('readTokenFromHash', () => {
-  it('reads the token from a fragment', () => {
-    expect(readTokenFromHash('#token=abc.def.ghi')).toBe('abc.def.ghi');
-  });
-
-  it('reads the token when the leading hash is already stripped', () => {
-    expect(readTokenFromHash('token=abc.def.ghi')).toBe('abc.def.ghi');
-  });
-
-  it('decodes a percent-encoded token', () => {
-    expect(readTokenFromHash('#token=abc%2Bdef')).toBe('abc+def');
-  });
-
-  it('picks the token out of a fragment carrying other values', () => {
-    expect(readTokenFromHash('#state=xyz&token=abc.def.ghi')).toBe('abc.def.ghi');
-  });
-
-  it('returns null for an empty fragment', () => {
-    expect(readTokenFromHash('')).toBeNull();
-  });
-
-  it('returns null when the fragment has no token', () => {
-    expect(readTokenFromHash('#state=xyz')).toBeNull();
-  });
-
-  it('returns null for a blank token', () => {
-    expect(readTokenFromHash('#token=')).toBeNull();
-  });
-});
+import { describeOAuthError } from './oauth';
 
 describe('describeOAuthError', () => {
   it('returns null when there is no error code', () => {

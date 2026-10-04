@@ -155,13 +155,16 @@ paths:
   /api/v1/auth/oauth/{provider}/callback:
     get:
       operationId: completeOAuthSignIn
-      summary: Complete the OAuth flow and hand back a session token
+      summary: Complete the OAuth flow and park the session for the web app
       description: >-
         Exchanges the authorization code, verifies the ID token, then resolves the
         account (existing identity, link by provider-verified email, or a brand-new
-        shop with an OWNER). Always answers with a redirect, never a JSON body:
-        success goes to `/auth/callback#token=<jwt>` on the web app — the token rides
-        in the fragment so it never reaches a server log — and any failure goes to
+        shop with an OWNER). Always answers with a redirect, never a JSON body.
+        On success it sets the session token in a short-lived (60 s) HttpOnly,
+        SameSite=Lax `oauth_session` cookie scoped to `/api/v1/auth/oauth/session`
+        and redirects to `/auth/callback` on the web app, which claims the token
+        with `POST /api/v1/auth/oauth/session`. The token never appears in a URL,
+        so a crafted link cannot plant someone else's session. Any failure goes to
         `/login?error=<code>`.
       tags: ["Auth"]
       security: []
@@ -191,8 +194,58 @@ paths:
       responses:
         '302':
           description: >-
-            Redirect to the web app — with the token in the fragment on success, or to
+            Redirect to the web app — to `/auth/callback` with no token in the URL on
+            success, or to
             `/login?error=access_denied|session_expired|provider_unavailable|sign_in_failed`.
+          headers:
+            Set-Cookie:
+              description: >-
+                On success, `oauth_session=<jwt>; Path=/api/v1/auth/oauth/session;
+                Max-Age=60; HttpOnly; SameSite=Lax` (plus `Secure` in production).
+                The `oauth_tx` transaction cookie is cleared on every outcome.
+              schema:
+                type: string
+  /api/v1/auth/oauth/session:
+    post:
+      operationId: exchangeOAuthSession
+      summary: Claim the session token parked by the OAuth callback
+      description: >-
+        Reads the `oauth_session` handoff cookie set by the callback redirect and
+        returns its session token, clearing the cookie on every outcome so it can be
+        claimed at most once. Called by the web app's `/auth/callback` page on its
+        own origin. Needs no CSRF token: SameSite=Lax keeps the cookie off
+        cross-site POSTs, and the response is not readable cross-origin.
+      tags: ["Auth"]
+      security: []
+      responses:
+        '200':
+          description: The handoff cookie held a valid session token.
+          headers:
+            Set-Cookie:
+              description: Clears `oauth_session`.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token]
+                properties:
+                  token:
+                    type: string
+        '401':
+          description: >-
+            No handoff cookie was sent, or it is expired, tampered with, or not a
+            session token. The cookie is still cleared.
+          headers:
+            Set-Cookie:
+              description: Clears `oauth_session`.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/auth/me:
     get:
       operationId: getCurrentUser

@@ -1,10 +1,3 @@
-// The API hands the session token back in the URL fragment rather than the query
-// string, so it never reaches a server log, proxy or Referer header.
-export function readTokenFromHash(hash: string): string | null {
-  const token = new URLSearchParams(hash.replace(/^#/, '')).get('token');
-  return token && token.trim() !== '' ? token : null;
-}
-
 const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   access_denied: 'Sign-in was cancelled.',
   session_expired: 'That sign-in attempt timed out. Please try again.',

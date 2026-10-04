@@ -1,15 +1,18 @@
-import { Router, type Response } from 'express';
+import { Router, type CookieOptions, type Response } from 'express';
 import rateLimit from 'express-rate-limit';
 
 import { asyncHandler } from '../lib/asyncHandler';
 import { buildRedirectUri, findEnabledProvider, getWebAppUrl, listEnabledProviders } from '../lib/oauthProviders';
 import {
+  OAUTH_SESSION_COOKIE,
   OAUTH_TRANSACTION_COOKIE,
+  oauthSessionCookieOptions,
   oauthTransactionCookieOptions,
   signOAuthTransaction,
   verifyOAuthTransaction,
 } from '../lib/oauthTransaction';
-import { NotFoundError } from '../services/errors';
+import { verifyToken } from '../services/auth';
+import { NotFoundError, UnauthorizedError } from '../services/errors';
 import { buildAuthorizationRequest, fetchProfileFromCallback, signInWithOAuthProfile } from '../services/oauth';
 
 const startLimiter = rateLimit({
@@ -48,9 +51,15 @@ oauthRouter.get(
   }),
 );
 
+// Express 4's clearCookie derives expiry from maxAge when given one, which would
+// re-set the cookie instead of expiring it, so the clear goes out without it.
+function clearOAuthCookie(res: Response, cookieName: string, cookieOptions: CookieOptions): void {
+  const { maxAge: _maxAge, ...clearOptions } = cookieOptions;
+  res.clearCookie(cookieName, clearOptions);
+}
+
 function clearTransactionCookie(res: Response): void {
-  const { maxAge: _maxAge, ...clearOptions } = oauthTransactionCookieOptions();
-  res.clearCookie(OAUTH_TRANSACTION_COOKIE, clearOptions);
+  clearOAuthCookie(res, OAUTH_TRANSACTION_COOKIE, oauthTransactionCookieOptions());
 }
 
 // The caller here is a browser mid-redirect, not an API client, so every failure ends as
@@ -101,11 +110,34 @@ oauthRouter.get('/auth/oauth/:provider/callback', async (req, res) => {
     const { token } = await signInWithOAuthProfile(provider.id, profile);
 
     clearTransactionCookie(res);
-    // Handed over in the fragment, not the query string: fragments are never sent to a
-    // server, so the token stays out of access logs, proxies and the Referer header.
-    res.redirect(`${getWebAppUrl()}/auth/callback#token=${encodeURIComponent(token)}`);
+    // Never in the URL: a page that adopted a token from its own address could be fed an
+    // attacker's session by a crafted link. The cookie is only ever set by this response.
+    res.cookie(OAUTH_SESSION_COOKIE, token, oauthSessionCookieOptions());
+    res.redirect(`${getWebAppUrl()}/auth/callback`);
   } catch (error) {
     console.error('[oauth] callback failed:', error);
     failureRedirect('sign_in_failed');
   }
 });
+
+// Safe from cross-site use without a CSRF token: SameSite=Lax keeps the cookie off a
+// cross-site POST, and CORS never allows credentials, so no other origin can read the
+// token from a response.
+oauthRouter.post(
+  '/auth/oauth/session',
+  asyncHandler(async (req, res) => {
+    const sessionCookie = req.cookies?.[OAUTH_SESSION_COOKIE];
+    clearOAuthCookie(res, OAUTH_SESSION_COOKIE, oauthSessionCookieOptions());
+
+    if (typeof sessionCookie !== 'string') {
+      throw new UnauthorizedError('No sign-in is waiting to be completed');
+    }
+    try {
+      verifyToken(sessionCookie);
+    } catch {
+      throw new UnauthorizedError('Sign-in handoff is invalid or expired');
+    }
+
+    res.json({ token: sessionCookie });
+  }),
+);

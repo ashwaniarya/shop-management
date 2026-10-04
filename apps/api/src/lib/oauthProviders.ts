@@ -69,3 +69,40 @@ export function buildRedirectUri(providerId: string): string {
   const base = (process.env.OAUTH_REDIRECT_BASE_URL ?? getWebAppUrl()).replace(/\/$/, '');
   return `${base}/api/v1/auth/oauth/${providerId}/callback`;
 }
+
+function readOrigin(envVarName: string, value: string): string {
+  try {
+    return new URL(value).origin;
+  } catch {
+    throw new Error(`${envVarName} is not a valid absolute URL: "${value}"`);
+  }
+}
+
+// Checked at boot because both misconfigurations fail silently per request: without
+// WEB_APP_URL every redirect falls back to localhost, and a callback on another origin
+// never receives the transaction cookie /start set on the web origin (session_expired).
+export function assertOAuthRedirectConfigured(): void {
+  if (process.env.NODE_ENV !== 'production' || listEnabledProviders().length === 0) {
+    return;
+  }
+
+  const webAppUrl = process.env.WEB_APP_URL;
+  if (!webAppUrl?.trim()) {
+    throw new Error(
+      'WEB_APP_URL must be set to the public web app origin when an OAuth provider is enabled in production.',
+    );
+  }
+  const webAppOrigin = readOrigin('WEB_APP_URL', webAppUrl);
+
+  const redirectBaseUrl = process.env.OAUTH_REDIRECT_BASE_URL;
+  if (redirectBaseUrl === undefined) {
+    return;
+  }
+  const redirectOrigin = readOrigin('OAUTH_REDIRECT_BASE_URL', redirectBaseUrl);
+  if (redirectOrigin !== webAppOrigin) {
+    throw new Error(
+      `OAUTH_REDIRECT_BASE_URL origin (${redirectOrigin}) must match WEB_APP_URL origin (${webAppOrigin}): ` +
+        'the OAuth transaction cookie is set on the web app origin and would not reach a callback on another host.',
+    );
+  }
+}
