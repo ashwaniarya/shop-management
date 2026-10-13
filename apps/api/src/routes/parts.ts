@@ -32,6 +32,7 @@ import { NotFoundError } from '../services/errors';
 import { buildFitmentWhere, validateFitmentInput } from '../services/fitment';
 import { type FamilyMember, resolveFamily, validateCopyOfTarget } from '../services/partFamily';
 import { searchPartsByNumber } from '../services/partSearch';
+import { createPartWithGeneratedSku } from '../services/partSku';
 
 export const partsRouter = Router();
 
@@ -100,13 +101,17 @@ partsRouter.post(
       await validateCopyOfTarget(null, req.body.copyOfPartId);
     }
 
-    const part = await prisma.part.create({
-      data: {
-        ...req.body,
-        skuNormalized: normalizeNumber(req.body.sku),
-        mpnNormalized: normalizeNumber(req.body.manufacturerPartNumber),
-      },
-    });
+    const { sku, ...rest } = req.body;
+    const partData = { ...rest, mpnNormalized: normalizeNumber(req.body.manufacturerPartNumber) };
+
+    // A blank/absent sku means "generate one for me"; a supplied sku keeps its own
+    // uniqueness semantics, so a duplicate still surfaces as a 409 rather than retrying.
+    const part =
+      typeof sku === 'string' && sku.trim() !== ''
+        ? await prisma.part.create({
+            data: { ...partData, sku: sku.trim(), skuNormalized: normalizeNumber(sku.trim()) },
+          })
+        : await createPartWithGeneratedSku(partData);
 
     res.status(201).set('Location', `/api/v1/parts/${part.id}`).json(serializePart(part));
   }),

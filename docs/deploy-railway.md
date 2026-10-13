@@ -10,7 +10,7 @@ Live deployment (project `shop-management`, id `bb740cba-e2d7-4ec5-86f8-e68085c1
 
 Files that make it work (committed in the repo):
 - `apps/api/Dockerfile` — installs the workspace, `pnpm --filter api build`; CMD = `migrate deploy → bootstrap:owner → start`. Installs OpenSSL for Prisma.
-- `apps/web/Dockerfile` — installs the workspace, `ARG NEXT_PUBLIC_API_URL` (inlined into the client bundle), `pnpm --filter web build`; CMD = `next start -p $PORT`.
+- `apps/web/Dockerfile` — installs the workspace, `ARG NEXT_PUBLIC_API_URL` (inlined into the client bundle; set to the **web** origin, see step 4) and `ARG API_PROXY_TARGET` (the API origin the `/api/v1/*` rewrite proxies to), `pnpm --filter web build`; CMD = `next start -p $PORT`.
 - `.dockerignore` — keeps `node_modules`/`dist`/`.next`/`.env` out of the build context.
 
 > ⚠️ **Auth is mandatory.** `JWT_SECRET` is read at api boot (crash-loop without it), and a fresh DB has **zero login-capable users** until `bootstrap:owner` runs. Step 3 sets both. Do **not** run the dev seed (`db:seed`) in a real deployment — it wipes every table and uses public PINs.
@@ -31,25 +31,49 @@ railway domain --service web --port 8080     # -> https://<web-domain>
 #    - RAILWAY_DOCKERFILE_PATH selects the Dockerfile (relative to repo root).
 #    - JWT_SECRET: generated fresh; the api throws at boot if unset.
 #    - ALLOWED_ORIGINS: the EXACT web origin — https, no trailing slash, no path
-#      (CORS is exact-string matched; a mismatch breaks the browser UI while curl still works).
+#      (CORS is exact-string matched). The browser normally reaches the API through the
+#      web app's same-origin proxy (step 4), so this only matters for direct calls.
 #    - BOOTSTRAP_OWNER_*: the first-owner login, created once on first boot (idempotent).
+#    - WEB_APP_URL: the web origin. The OAuth redirect URI and every post-login redirect
+#      are built from it. REQUIRED once any OAuth provider is enabled: the api refuses to
+#      boot in production without it (otherwise it would silently use http://localhost:3000).
+#      Same value as ALLOWED_ORIGINS.
 #    - PORT=8080 matches the domain target port.
 railway variables --service api \
   --set 'RAILWAY_DOCKERFILE_PATH=apps/api/Dockerfile' \
   --set 'DATABASE_URL=${{Postgres.DATABASE_URL}}' \
   --set 'ALLOWED_ORIGINS=https://<web-domain>' \
+  --set 'WEB_APP_URL=https://<web-domain>' \
   --set "JWT_SECRET=$(openssl rand -hex 32)" \
   --set 'BOOTSTRAP_OWNER_USERNAME=owner' \
   --set 'BOOTSTRAP_OWNER_PIN=<choose 4-6 digits>' \
   --set 'BOOTSTRAP_SHOP_NAME=Demo Shop' \
   --set 'PORT=8080'
 
+# 3b. (optional) Sign in with Google — read at REQUEST time, so this is a plain redeploy,
+#     and the button simply doesn't render until both values are present.
+#     WEB_APP_URL (step 3) must already be set, or the api refuses to boot.
+#     Full walkthrough: docs/oauth-setup.md
+# railway variables --service api \
+#   --set 'GOOGLE_CLIENT_ID=<client id>' \
+#   --set 'GOOGLE_CLIENT_SECRET=<client secret>'
+
 # 4. web service configuration
-#    NEXT_PUBLIC_API_URL is read at BUILD time (Docker ARG in apps/web/Dockerfile) and
-#    inlined into the client bundle; Railway exposes service variables to the build.
+#    Both are read at BUILD time (Docker ARGs in apps/web/Dockerfile); Railway exposes
+#    service variables to the build.
+#    - NEXT_PUBLIC_API_URL: the WEB origin, NOT the api domain. The browser then calls
+#      https://<web-domain>/api/v1/*, which the Next server proxies to the API.
+#    - API_PROXY_TARGET: the api origin that proxy forwards to.
+#    Why same-origin: OAuth sign-in sets an HttpOnly transaction cookie that must be
+#    first-party on the web origin, where the callback is registered, and
+#    *.up.railway.app is on the Public Suffix List, so the web and api subdomains can
+#    never share a cookie. The sign-in link is therefore always a relative path; pointing
+#    NEXT_PUBLIC_API_URL at the web origin keeps every other browser call on that one
+#    origin too (no CORS, no second DNS lookup).
 railway variables --service web \
   --set 'RAILWAY_DOCKERFILE_PATH=apps/web/Dockerfile' \
-  --set 'NEXT_PUBLIC_API_URL=https://<api-domain>' \
+  --set 'NEXT_PUBLIC_API_URL=https://<web-domain>' \
+  --set 'API_PROXY_TARGET=https://<api-domain>' \
   --set 'PORT=8080'
 
 # 5. Deploy (uploads repo root; .gitignore respected)
@@ -62,6 +86,7 @@ curl https://<api-domain>/docs/                       # Swagger UI
 curl -s -X POST https://<api-domain>/api/v1/auth/login \
   -H 'content-type: application/json' \
   -d '{"username":"owner","pin":"<your-pin>"}'         # -> { token, user } (the bootstrap owner)
+curl https://<web-domain>/api/v1/auth/oauth/providers # {"data":[...]} via the same-origin proxy
 open https://<web-domain>                             # log in as owner / <your-pin>
 ```
 

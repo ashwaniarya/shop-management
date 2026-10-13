@@ -4,6 +4,7 @@ import { UserRole } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { prisma } from '../lib/prisma';
+import { signOAuthTransaction, verifyOAuthTransaction } from '../lib/oauthTransaction';
 import { hashPin, INVALID_CREDENTIALS_MESSAGE, login, signToken, verifyPin, verifyToken } from './auth';
 import { UnauthorizedError } from './errors';
 
@@ -34,6 +35,25 @@ describe('signToken / verifyToken', () => {
 
   it('throws on a garbage token', () => {
     expect(() => verifyToken('not-a-real-token')).toThrow();
+  });
+
+  // The OAuth handshake cookie is signed with the same secret, and anyone can mint one
+  // just by starting a sign-in. It must never be usable as a session token.
+  it('rejects an OAuth transaction cookie presented as a session token', () => {
+    const transactionCookie = signOAuthTransaction({
+      provider: 'google',
+      state: 'state-value',
+      nonce: 'nonce-value',
+      codeVerifier: 'verifier-value',
+    });
+
+    expect(() => verifyToken(transactionCookie)).toThrow(/not a session token/i);
+  });
+
+  it('rejects a session token presented as an OAuth transaction cookie', () => {
+    const sessionToken = signToken({ id: 42, shopId: 7, role: UserRole.MANAGER });
+
+    expect(() => verifyOAuthTransaction(sessionToken)).toThrow();
   });
 });
 

@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 
+import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express from 'express';
 import swaggerUi from 'swagger-ui-express';
@@ -13,6 +14,7 @@ import { categoriesRouter } from './routes/categories';
 import { inventoryRouter } from './routes/inventory';
 import { invoicesRouter } from './routes/invoices';
 import { manufacturersRouter } from './routes/manufacturers';
+import { oauthRouter } from './routes/oauth';
 import { partGradesRouter } from './routes/partGrades';
 import { partsRouter } from './routes/parts';
 import { shopsRouter } from './routes/shops';
@@ -38,6 +40,8 @@ app.set('trust proxy', 1);
 
 app.use(cors({ origin: parseAllowedOrigins(process.env.ALLOWED_ORIGINS) }));
 app.use(express.json());
+// Only the OAuth handshake reads cookies (its signed state/nonce/PKCE transaction).
+app.use(cookieParser());
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
@@ -47,10 +51,12 @@ const openApiDocument: Record<string, unknown> = YAML.parse(readFileSync(resolve
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(openApiDocument));
 
 app.use('/api/v1', authRouter);
+app.use('/api/v1', oauthRouter);
 
 // Global gate: every /api/v1/* route below requires a valid Bearer token.
-// authRouter is mounted above so POST /auth/login (and the already-authenticated
-// /auth/me, /auth/logout) are matched before this gate.
+// authRouter and oauthRouter are mounted above so POST /auth/login, the OAuth
+// handshake, and the already-authenticated /auth/me, /auth/logout are matched
+// before this gate.
 app.use('/api/v1', authenticate);
 
 app.use('/api/v1', manufacturersRouter);

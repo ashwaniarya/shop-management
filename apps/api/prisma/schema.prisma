@@ -260,7 +260,14 @@ model User {
   shopId       Int      @map("shop_id")
   name         String
   phone        String?
+  // Contact detail only. Any OWNER can set this to an arbitrary string via
+  // POST/PATCH /shops/:shopId/users, so it is NOT proof that the user owns the address
+  // and must never be used to match an incoming social identity.
   email        String?
+  // Written only by a provider-verified OAuth sign-in — never from request input — so
+  // matching on it is safe. Unique so an identity links to exactly one account; NULLs
+  // stay distinct in Postgres, leaving PIN-only users unaffected.
+  verifiedEmail String? @unique @map("verified_email")
   username     String?  @unique
   passwordHash String?  @map("password_hash")
   role         UserRole
@@ -271,9 +278,29 @@ model User {
   shop         Shop               @relation(fields: [shopId], references: [id], onDelete: Restrict)
   transactions StockTransaction[]
   invoices     Invoice[]
+  identities   UserIdentity[]
 
   @@index([shopId])
   @@map("app_user")
+}
+
+// One row per external account (Google, …) linked to a user. Kept separate from User
+// so one person can attach several providers, and so a social-only account needs no
+// username/passwordHash at all — both columns are already nullable.
+model UserIdentity {
+  id             Int      @id @default(autoincrement())
+  userId         Int      @map("user_id")
+  provider       String
+  providerUserId String   @map("provider_user_id")
+  email          String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerUserId])
+  @@index([userId])
+  @@map("user_identity")
 }
 
 model InventoryItem {

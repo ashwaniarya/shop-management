@@ -47,7 +47,14 @@ export function signToken(user: { id: number; shopId: number; role: UserRole }):
 }
 
 export function verifyToken(token: string): AuthTokenClaims {
-  return jwt.verify(token, JWT_SECRET) as unknown as AuthTokenClaims;
+  const claims = jwt.verify(token, JWT_SECRET) as unknown as AuthTokenClaims;
+  // The OAuth handshake cookie is signed with this same secret. Without this shape check
+  // it would verify here too, reaching the user lookup with an undefined id — so reject
+  // anything that isn't a session token outright.
+  if (typeof claims.sub !== 'number' || typeof claims.shopId !== 'number') {
+    throw new UnauthorizedError('Token is not a session token');
+  }
+  return claims;
 }
 
 export async function login(username: string, pin: string): Promise<{ token: string; user: AuthUser }> {

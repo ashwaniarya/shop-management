@@ -33,3 +33,11 @@ export type Register = z.infer<typeof registerSchema>;
 // Registration logs the new owner straight in, so its response is the login shape.
 export const registerResponseSchema = loginResponseSchema;
 export type RegisterResponse = z.infer<typeof registerResponseSchema>;
+
+// One social sign-in button. The API only lists providers whose credentials are
+// configured, so the web app renders whatever comes back and nothing when it's empty.
+export const oauthProviderSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+});
+export type OAuthProvider = z.infer<typeof oauthProviderSchema>;
