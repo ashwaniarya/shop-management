@@ -140,13 +140,20 @@ function assertAccountActive(user: { isActive: boolean }): void {
   }
 }
 
-function signInAs(user: { id: number; shopId: number; name: string; role: UserRole; isActive: boolean }): {
+function signInAs(user: {
+  id: number;
+  shopId: number;
+  name: string;
+  role: UserRole;
+  isActive: boolean;
+  tokenVersion: number;
+}): {
   token: string;
   user: AuthUser;
 } {
   assertAccountActive(user);
   const authUser = toAuthUser(user);
-  return { token: signToken(authUser), user: authUser };
+  return { token: signToken({ ...authUser, tokenVersion: user.tokenVersion }), user: authUser };
 }
 
 function deriveShopName(profile: OAuthProfile): string {

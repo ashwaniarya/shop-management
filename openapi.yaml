@@ -2013,16 +2013,17 @@ components:
 
     LoginRequest:
       type: object
-      required: [username, pin]
+      required: [username, password]
       properties:
         username:
           type: string
-        pin:
+        password:
           type: string
-          description: 4–6 digit PIN.
+          minLength: 10
+          description: Password, or a legacy 4–6 digit PIN when the account must set a password.
     RegisterRequest:
       type: object
-      required: [shopName, ownerName, username, pin]
+      required: [shopName, ownerName, username, password]
       properties:
         shopName:
           type: string
@@ -2031,9 +2032,10 @@ components:
         username:
           type: string
           minLength: 3
-        pin:
+        password:
           type: string
-          description: Exactly 6 digits.
+          minLength: 10
+          description: At least 10 characters and not digits only.
     OAuthProvider:
       type: object
       required: [id, label]
@@ -2048,10 +2050,8 @@ components:
           example: Google
     LoginResponse:
       type: object
-      required: [token, user]
+      required: [user]
       properties:
-        token:
-          type: string
         user:
           $ref: '#/components/schemas/AuthUser'
     AuthUser:
@@ -2792,10 +2792,10 @@ components:
           type: string
           minLength: 3
           description: Sets up a login for this user. Omit to leave the user without one.
-        pin:
+        password:
           type: string
-          pattern: '^\d{4,6}$'
-          description: 4–6 digit login PIN, hashed server-side. Write-only — never returned.
+          minLength: 10
+          description: Login password, hashed server-side. Not digits only. Write-only — never returned.
         role:
           type: string
           enum: [OWNER, MANAGER, STAFF]
@@ -2812,10 +2812,10 @@ components:
           type: string
           minLength: 3
           description: Sets up a login for this user. Omit to leave unchanged.
-        pin:
+        password:
           type: string
-          pattern: '^\d{4,6}$'
-          description: 4–6 digit login PIN, hashed server-side. Omit to leave unchanged. Write-only — never returned.
+          minLength: 10
+          description: Replacement password, hashed server-side. Omit to leave unchanged. Write-only — never returned.
         role:
           type: string
           enum: [OWNER, MANAGER, STAFF]

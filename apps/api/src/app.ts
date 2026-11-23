@@ -38,9 +38,9 @@ export const app = express();
 // client IP (from X-Forwarded-For) instead of the proxy. Scoped to 1, not `true`.
 app.set('trust proxy', 1);
 
-app.use(cors({ origin: parseAllowedOrigins(process.env.ALLOWED_ORIGINS) }));
+app.use(cors({ origin: parseAllowedOrigins(process.env.ALLOWED_ORIGINS), credentials: true }));
 app.use(express.json());
-// Only the OAuth handshake reads cookies (its signed state/nonce/PKCE transaction).
+// Session cookie plus the OAuth handshake cookies.
 app.use(cookieParser());
 
 app.get('/health', (_req, res) => {
@@ -53,7 +53,7 @@ app.use('/docs', swaggerUi.serve, swaggerUi.setup(openApiDocument));
 app.use('/api/v1', authRouter);
 app.use('/api/v1', oauthRouter);
 
-// Global gate: every /api/v1/* route below requires a valid Bearer token.
+// Global gate: every /api/v1/* route below requires a session cookie or Bearer token.
 // authRouter and oauthRouter are mounted above so POST /auth/login, the OAuth
 // handshake, and the already-authenticated /auth/me, /auth/logout are matched
 // before this gate.

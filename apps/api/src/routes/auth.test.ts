@@ -4,13 +4,29 @@ import { UserRole } from '@prisma/client';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { sessionCookieName } from '@shop/shared';
+
 import { app } from '../app';
 import { prisma } from '../lib/prisma';
 import { createUserWithCredentials, tokenFor } from '../services/test-fixtures';
 
+function sessionSetCookie(response: { headers: Record<string, unknown> }): string {
+  const raw = response.headers['set-cookie'];
+  const list = Array.isArray(raw) ? raw : raw ? [String(raw)] : [];
+  const match = list.find((line) => line.startsWith(`${sessionCookieName}=`));
+  if (!match) {
+    throw new Error('session cookie was not set');
+  }
+  return match;
+}
+
+function sessionCookie(response: { headers: Record<string, unknown> }): string {
+  return sessionSetCookie(response).split(';')[0] ?? '';
+}
+
 describe('auth router', () => {
   const ts = Date.now();
-  const PIN = '1234';
+  const PIN = 'workshop-pass';
 
   let shopId: number;
   const userIds: number[] = [];
@@ -71,12 +87,12 @@ describe('auth router', () => {
   });
 
   describe('POST /auth/login', () => {
-    it('returns 200 with a token and the matching user shape (no passwordHash/pin) for valid credentials', async () => {
-      const response = await request(app).post('/api/v1/auth/login').send({ username: activeUsername, pin: PIN });
+    it('returns 200 with a session cookie and the matching user shape (no token or passwordHash) for valid credentials', async () => {
+      const response = await request(app).post('/api/v1/auth/login').send({ username: activeUsername, password: PIN });
 
       expect(response.status).toBe(200);
-      expect(typeof response.body.token).toBe('string');
-      expect(response.body.token.length).toBeGreaterThan(0);
+      expect(response.body).not.toHaveProperty('token');
+      expect(sessionSetCookie(response)).toContain('HttpOnly');
       expect(response.body.user).toEqual({
         id: activeUserId,
         shopId,
@@ -87,14 +103,14 @@ describe('auth router', () => {
       expect(response.body.user).not.toHaveProperty('pin');
     });
 
-    it('returns 401 for a wrong pin', async () => {
-      const response = await request(app).post('/api/v1/auth/login').send({ username: activeUsername, pin: '0000' });
+    it('returns 401 for a wrong password', async () => {
+      const response = await request(app).post('/api/v1/auth/login').send({ username: activeUsername, password: 'not-the-password' });
 
       expect(response.status).toBe(401);
     });
 
     it('returns 401 for an unknown username', async () => {
-      const response = await request(app).post('/api/v1/auth/login').send({ username: unknownUsername, pin: PIN });
+      const response = await request(app).post('/api/v1/auth/login').send({ username: unknownUsername, password: PIN });
 
       expect(response.status).toBe(401);
     });
@@ -102,16 +118,16 @@ describe('auth router', () => {
     it('returns 401 for an inactive user', async () => {
       const response = await request(app)
         .post('/api/v1/auth/login')
-        .send({ username: inactiveUsername, pin: PIN });
+        .send({ username: inactiveUsername, password: PIN });
 
       expect(response.status).toBe(401);
     });
 
     it('returns the same error message across all failure modes', async () => {
       const [wrongPin, unknownUser, inactiveUser] = await Promise.all([
-        request(app).post('/api/v1/auth/login').send({ username: activeUsername, pin: '0000' }),
-        request(app).post('/api/v1/auth/login').send({ username: unknownUsername, pin: PIN }),
-        request(app).post('/api/v1/auth/login').send({ username: inactiveUsername, pin: PIN }),
+        request(app).post('/api/v1/auth/login').send({ username: activeUsername, password: 'not-the-password' }),
+        request(app).post('/api/v1/auth/login').send({ username: unknownUsername, password: PIN }),
+        request(app).post('/api/v1/auth/login').send({ username: inactiveUsername, password: PIN }),
       ]);
 
       const messages = new Set([wrongPin.body.error.message, unknownUser.body.error.message, inactiveUser.body.error.message]);
@@ -120,19 +136,19 @@ describe('auth router', () => {
   });
 
   describe('POST /auth/register', () => {
-    const REGISTER_PIN = '135790';
+    const REGISTER_PASSWORD = 'register-pass';
 
-    it('creates a new shop + OWNER and returns 201 with a token and the auth user', async () => {
+    it('creates a new shop + OWNER and returns 201 with a session cookie and the auth user', async () => {
       const response = await request(app).post('/api/v1/auth/register').send({
         shopName: `Register Test Shop ${ts}`,
         ownerName: 'Register Owner',
         username: `auth-register-new-${ts}`,
-        pin: REGISTER_PIN,
+        password: REGISTER_PASSWORD,
       });
 
       expect(response.status).toBe(201);
-      expect(typeof response.body.token).toBe('string');
-      expect(response.body.token.length).toBeGreaterThan(0);
+      expect(response.body).not.toHaveProperty('token');
+      expect(sessionSetCookie(response)).toContain('HttpOnly');
       expect(response.body.user).toMatchObject({ name: 'Register Owner', role: UserRole.OWNER });
       expect(typeof response.body.user.id).toBe('number');
       expect(typeof response.body.user.shopId).toBe('number');
@@ -144,19 +160,17 @@ describe('auth router', () => {
       registeredShopIds.push(response.body.user.shopId);
     });
 
-    it('returns a token that immediately authenticates GET /auth/me', async () => {
+    it('sets a cookie that immediately authenticates GET /auth/me', async () => {
       const registerResponse = await request(app).post('/api/v1/auth/register').send({
         shopName: `Register Me Shop ${ts}`,
         ownerName: 'Auto Login',
         username: `auth-register-me-${ts}`,
-        pin: REGISTER_PIN,
+        password: REGISTER_PASSWORD,
       });
       registeredUserIds.push(registerResponse.body.user.id);
       registeredShopIds.push(registerResponse.body.user.shopId);
 
-      const meResponse = await request(app)
-        .get('/api/v1/auth/me')
-        .set('Authorization', `Bearer ${registerResponse.body.token}`);
+      const meResponse = await request(app).get('/api/v1/auth/me').set('Cookie', sessionCookie(registerResponse));
 
       expect(meResponse.status).toBe(200);
       expect(meResponse.body).toEqual(registerResponse.body.user);
@@ -167,19 +181,19 @@ describe('auth router', () => {
         shopName: 'Another Shop',
         ownerName: 'Someone Else',
         username: activeUsername, // created in beforeAll
-        pin: REGISTER_PIN,
+        password: REGISTER_PASSWORD,
       });
 
       expect(response.status).toBe(409);
       expect(response.body.error.message).toMatch(/already taken/i);
     });
 
-    it('returns 400 for a pin that is not exactly 6 digits', async () => {
+    it('returns 400 for a digits-only password', async () => {
       const response = await request(app).post('/api/v1/auth/register').send({
         shopName: 'Bad Pin Shop',
         ownerName: 'Bad Pin',
         username: `auth-register-badpin-${ts}`,
-        pin: '1234',
+        password: '1234567890',
       });
 
       expect(response.status).toBe(400);
@@ -190,7 +204,7 @@ describe('auth router', () => {
         shopName: 'Short Name Shop',
         ownerName: 'Short',
         username: 'ab',
-        pin: REGISTER_PIN,
+        password: REGISTER_PASSWORD,
       });
 
       expect(response.status).toBe(400);
@@ -227,11 +241,9 @@ describe('auth router', () => {
     it('returns 200 with the authUser for a token obtained from /auth/login', async () => {
       const loginResponse = await request(app)
         .post('/api/v1/auth/login')
-        .send({ username: activeUsername, pin: PIN });
+        .send({ username: activeUsername, password: PIN });
 
-      const response = await request(app)
-        .get('/api/v1/auth/me')
-        .set('Authorization', `Bearer ${loginResponse.body.token}`);
+      const response = await request(app).get('/api/v1/auth/me').set('Cookie', sessionCookie(loginResponse));
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual(loginResponse.body.user);
@@ -248,12 +260,14 @@ describe('auth router', () => {
   });
 
   describe('POST /auth/logout', () => {
-    it('returns 204 with a valid token', async () => {
+    it('returns 204 and the old token no longer authenticates', async () => {
       const token = tokenFor({ id: activeUserId, shopId, role: UserRole.OWNER });
 
       const response = await request(app).post('/api/v1/auth/logout').set('Authorization', `Bearer ${token}`);
 
       expect(response.status).toBe(204);
+      const meResponse = await request(app).get('/api/v1/auth/me').set('Authorization', `Bearer ${token}`);
+      expect(meResponse.status).toBe(401);
     });
 
     it('returns 401 with no Authorization header', async () => {

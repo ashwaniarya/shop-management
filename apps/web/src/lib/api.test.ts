@@ -183,10 +183,10 @@ describe('api client', () => {
   });
 
   it('posts the register body to /auth/register and returns the login response', async () => {
-    const loginResponse = { token: 'jwt-token', user: { id: 7, shopId: 3, name: 'Asha', role: 'OWNER' } };
+    const loginResponse = { user: { id: 7, shopId: 3, name: 'Asha', role: 'OWNER' } };
     const fetchMock = mockFetchOnce({ ok: true, status: 201, json: () => Promise.resolve(loginResponse) });
 
-    const body = { shopName: 'My Store', ownerName: 'Asha', username: 'asha_store', pin: '123456' };
+    const body = { shopName: 'My Store', ownerName: 'Asha', username: 'asha_store', password: 'workshop-pass' };
     const result = await register(body);
 
     expect(result).toEqual(loginResponse);
@@ -220,12 +220,12 @@ describe('oauth', () => {
     });
 
     // Relative, never the API base URL: the handoff cookie lives on the web origin.
-    it('POSTs to the same-origin handoff path and returns the token', async () => {
-      const fetchMock = mockFetchOnce({ ok: true, status: 200, json: () => Promise.resolve({ token: 'jwt-token' }) });
+    it('POSTs to the same-origin handoff path and does not read a token', async () => {
+      const fetchMock = mockFetchOnce({ ok: true, status: 204 });
 
-      const token = await exchangeOAuthSession();
+      const result = await exchangeOAuthSession();
 
-      expect(token).toBe('jwt-token');
+      expect(result).toBeUndefined();
       const [calledUrl, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
       expect(calledUrl).toBe('/api/v1/auth/oauth/session');
       expect(requestInit.method).toBe('POST');

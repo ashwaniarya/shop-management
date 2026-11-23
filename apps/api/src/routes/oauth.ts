@@ -11,6 +11,7 @@ import {
   signOAuthTransaction,
   verifyOAuthTransaction,
 } from '../lib/oauthTransaction';
+import { sessionCookieName, sessionCookieOptions } from '../lib/authCookies';
 import { verifyToken } from '../services/auth';
 import { NotFoundError, UnauthorizedError } from '../services/errors';
 import { buildAuthorizationRequest, fetchProfileFromCallback, signInWithOAuthProfile } from '../services/oauth';
@@ -138,6 +139,7 @@ oauthRouter.post(
       throw new UnauthorizedError('Sign-in handoff is invalid or expired');
     }
 
-    res.json({ token: sessionCookie });
+    res.cookie(sessionCookieName, sessionCookie, sessionCookieOptions());
+    res.status(204).end();
   }),
 );

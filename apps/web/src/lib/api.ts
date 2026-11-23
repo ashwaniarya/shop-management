@@ -51,8 +51,6 @@ import type {
   VehicleModelUpdate,
 } from '@shop/shared';
 
-import { clearAuthToken, getAuthToken } from '@/lib/authToken';
-
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 const API_PREFIX = '/api/v1';
 
@@ -118,15 +116,10 @@ const OAUTH_SESSION_PATH = '/auth/oauth/session';
 const PAGES_THAT_HANDLE_THEIR_OWN_UNAUTHORIZED = ['/login', '/auth/callback'];
 
 function buildRequestHeaders(hasBody: boolean): HeadersInit | undefined {
-  const headers: Record<string, string> = {};
-  if (hasBody) {
-    headers['Content-Type'] = 'application/json';
+  if (!hasBody) {
+    return undefined;
   }
-  const token = getAuthToken();
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  return Object.keys(headers).length > 0 ? headers : undefined;
+  return { 'Content-Type': 'application/json' };
 }
 
 // A 401 means the stored token is missing/expired/invalid, except on the login
@@ -150,10 +143,7 @@ export function decideUnauthorizedAction(
 
 function handleUnauthorizedResponse(method: string, path: string): void {
   const currentPathname = typeof window !== 'undefined' ? window.location.pathname : '/login';
-  const { clearToken, redirect } = decideUnauthorizedAction(method, path, currentPathname);
-  if (clearToken) {
-    clearAuthToken();
-  }
+  const { redirect } = decideUnauthorizedAction(method, path, currentPathname);
   if (redirect && typeof window !== 'undefined') {
     window.location.href = '/login';
   }
@@ -167,6 +157,7 @@ async function request<T>(method: string, path: string, options: RequestOptions 
   try {
     response = await fetch(url, {
       method,
+      credentials: 'include',
       headers: buildRequestHeaders(options.body !== undefined),
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
     });
@@ -272,8 +263,12 @@ export interface TransactionSummary {
 
 // --- Auth --------------------------------------------------------------------------
 
-export function login(username: string, pin: string): Promise<LoginResponse> {
-  return post<LoginResponse>('/auth/login', { username, pin });
+export function login(username: string, password: string): Promise<LoginResponse> {
+  return post<LoginResponse>('/auth/login', { username, password });
+}
+
+export function upgradePassword(password: string): Promise<LoginResponse> {
+  return post<LoginResponse>('/auth/upgrade-password', { password });
 }
 
 export function register(input: Register): Promise<LoginResponse> {
@@ -297,9 +292,8 @@ export function buildOAuthStartUrl(providerId: string): string {
 
 // Same-origin for the same reason: the callback left the handoff cookie on the web
 // origin, so only a request to that origin carries it.
-export async function exchangeOAuthSession(): Promise<string> {
-  const { token } = await request<Pick<LoginResponse, 'token'>>('POST', OAUTH_SESSION_PATH, { sameOrigin: true });
-  return token;
+export async function exchangeOAuthSession(): Promise<void> {
+  await request<void>('POST', OAUTH_SESSION_PATH, { sameOrigin: true });
 }
 
 export function logout(): Promise<void> {

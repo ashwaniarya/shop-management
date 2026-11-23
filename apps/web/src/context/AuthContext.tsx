@@ -4,15 +4,22 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 
 import type { AuthUser, Register } from '@shop/shared';
 
-import { getMe, login as apiLogin, logout as apiLogout, register as apiRegister } from '@/lib/api';
-import { clearAuthToken, getAuthToken, setAuthToken } from '@/lib/authToken';
+import {
+  exchangeOAuthSession,
+  getMe,
+  login as apiLogin,
+  logout as apiLogout,
+  register as apiRegister,
+  upgradePassword as apiUpgradePassword,
+} from '@/lib/api';
 
 interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
-  login: (username: string, pin: string) => Promise<void>;
+  login: (username: string, password: string) => Promise<void>;
+  upgradePassword: (password: string) => Promise<void>;
   register: (input: Register) => Promise<void>;
-  adoptToken: (token: string) => Promise<void>;
+  finishOAuthSignIn: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -23,59 +30,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const token = getAuthToken();
-    if (!token) {
-      setIsLoading(false);
-      return;
-    }
-
     getMe()
       .then((authUser) => setUser(authUser))
       .catch(() => {
-        // A 401 already cleared the token in request(); on a network/5xx blip we
-        // keep the token so a valid session survives a transient failure.
         setUser(null);
       })
       .finally(() => setIsLoading(false));
   }, []);
 
-  const login = useCallback(async (username: string, pin: string) => {
-    const { token, user: authUser } = await apiLogin(username, pin);
-    setAuthToken(token);
+  const login = useCallback(async (username: string, password: string) => {
+    const { user: authUser } = await apiLogin(username, password);
+    setUser(authUser);
+  }, []);
+
+  const upgradePassword = useCallback(async (password: string) => {
+    const { user: authUser } = await apiUpgradePassword(password);
     setUser(authUser);
   }, []);
 
   const register = useCallback(async (input: Register) => {
-    const { token, user: authUser } = await apiRegister(input);
-    setAuthToken(token);
+    const { user: authUser } = await apiRegister(input);
     setUser(authUser);
   }, []);
 
-  // Used by the OAuth callback: the token was minted by the API during the redirect,
-  // so the only thing left is to store it and resolve who it belongs to.
-  const adoptToken = useCallback(async (token: string) => {
-    setAuthToken(token);
-    try {
-      setUser(await getMe());
-    } catch (error) {
-      clearAuthToken();
-      throw error;
-    }
+  // OAuth left the session in an httpOnly cookie. This call claims it, then loads the user.
+  const finishOAuthSignIn = useCallback(async () => {
+    await exchangeOAuthSession();
+    setUser(await getMe());
   }, []);
 
   const logout = useCallback(async () => {
     try {
       await apiLogout();
     } catch {
-      // Best-effort: still sign the user out locally even if the server call fails.
+      // Best-effort: still send the user to the login page if the server call fails.
     }
-    clearAuthToken();
     setUser(null);
     window.location.href = '/login';
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, adoptToken, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, register, upgradePassword, finishOAuthSignIn, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,17 +1,25 @@
 import type { NextFunction, Request, Response } from 'express';
 
+import { sessionCookieName } from '../lib/authCookies';
 import { asyncHandler } from '../lib/asyncHandler';
 import { prisma } from '../lib/prisma';
 import { verifyToken } from '../services/auth';
 import { UnauthorizedError } from '../services/errors';
 
-export const authenticate = asyncHandler(async (req: Request, _res: Response, next: NextFunction) => {
+function readSessionToken(req: Request): string | undefined {
   const header = req.headers.authorization;
-  if (!header || !header.startsWith('Bearer ')) {
-    throw new UnauthorizedError('Missing or malformed Authorization header');
+  if (header?.startsWith('Bearer ')) {
+    const bearer = header.slice('Bearer '.length).trim();
+    if (bearer) {
+      return bearer;
+    }
   }
+  const cookie = req.cookies?.[sessionCookieName];
+  return typeof cookie === 'string' && cookie !== '' ? cookie : undefined;
+}
 
-  const token = header.slice('Bearer '.length).trim();
+export const authenticate = asyncHandler(async (req: Request, _res: Response, next: NextFunction) => {
+  const token = readSessionToken(req);
   if (!token) {
     throw new UnauthorizedError('Missing or malformed Authorization header');
   }
@@ -25,9 +33,9 @@ export const authenticate = asyncHandler(async (req: Request, _res: Response, ne
 
   const user = await prisma.user.findUnique({
     where: { id: claims.sub },
-    select: { id: true, shopId: true, role: true, name: true, isActive: true },
+    select: { id: true, shopId: true, role: true, name: true, isActive: true, tokenVersion: true },
   });
-  if (!user || !user.isActive) {
+  if (!user || !user.isActive || user.tokenVersion !== claims.tokenVersion) {
     throw new UnauthorizedError('Invalid or expired token');
   }
 

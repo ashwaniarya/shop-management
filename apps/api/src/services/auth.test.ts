@@ -1,24 +1,25 @@
-// hashPin/verifyPin and signToken/verifyToken are pure-logic unit tests; login() is
+// hashPassword/verifyPassword and signToken/verifyToken are pure-logic unit tests; login() is
 // a behavioural test that exercises the real DB against namespaced, cleaned-up fixtures.
+import { failedLoginLimit } from '@shop/shared';
 import { UserRole } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { prisma } from '../lib/prisma';
 import { signOAuthTransaction, verifyOAuthTransaction } from '../lib/oauthTransaction';
-import { hashPin, INVALID_CREDENTIALS_MESSAGE, login, signToken, verifyPin, verifyToken } from './auth';
-import { UnauthorizedError } from './errors';
+import { hashPassword, INVALID_CREDENTIALS_MESSAGE, login, signToken, verifyPassword, verifyToken } from './auth';
+import { MustChangePasswordError, UnauthorizedError } from './errors';
 
-describe('hashPin / verifyPin', () => {
-  it('round-trips a correct pin to true', async () => {
-    const hash = await hashPin('1234');
+describe('hashPassword / verifyPassword', () => {
+  it('round-trips a correct password to true', async () => {
+    const hash = await hashPassword('workshop-pass');
 
-    await expect(verifyPin('1234', hash)).resolves.toBe(true);
+    await expect(verifyPassword('workshop-pass', hash)).resolves.toBe(true);
   });
 
-  it('rejects a wrong pin', async () => {
-    const hash = await hashPin('1234');
+  it('rejects a wrong password', async () => {
+    const hash = await hashPassword('workshop-pass');
 
-    await expect(verifyPin('9999', hash)).resolves.toBe(false);
+    await expect(verifyPassword('other-password', hash)).resolves.toBe(false);
   });
 });
 
@@ -31,6 +32,7 @@ describe('signToken / verifyToken', () => {
     expect(claims.sub).toBe(42);
     expect(claims.shopId).toBe(7);
     expect(claims.role).toBe(UserRole.MANAGER);
+    expect(claims.tokenVersion).toBe(0);
   });
 
   it('throws on a garbage token', () => {
@@ -70,9 +72,9 @@ describe('login', () => {
   const inactiveUsername = `auth-inactive-${ts}`;
   const unknownUsername = `auth-unknown-${ts}`;
 
-  async function loginErrorMessage(username: string, pin: string): Promise<string> {
+  async function loginErrorMessage(username: string, password: string): Promise<string> {
     try {
-      await login(username, pin);
+      await login(username, password);
     } catch (error) {
       if (error instanceof UnauthorizedError) {
         return error.message;
@@ -92,7 +94,7 @@ describe('login', () => {
         name: `Auth Test Active User ${ts}`,
         role: UserRole.OWNER,
         username: activeUsername,
-        passwordHash: await hashPin(PIN),
+        passwordHash: await hashPassword(PIN),
         isActive: true,
       },
     });
@@ -117,7 +119,7 @@ describe('login', () => {
         name: `Auth Test Inactive User ${ts}`,
         role: UserRole.STAFF,
         username: inactiveUsername,
-        passwordHash: await hashPin(PIN),
+        passwordHash: await hashPassword(PIN),
         isActive: false,
       },
     });
@@ -157,8 +159,34 @@ describe('login', () => {
     await expect(login(inactiveUsername, PIN)).rejects.toThrow(UnauthorizedError);
   });
 
-  it('throws UnauthorizedError for a wrong pin', async () => {
+  it('throws UnauthorizedError for a wrong password', async () => {
     await expect(login(activeUsername, '0000')).rejects.toThrow(UnauthorizedError);
+  });
+
+  it('rejects a correct password while the account is locked', async () => {
+    await prisma.user.update({
+      where: { id: activeUserId },
+      data: { lockedUntil: new Date(Date.now() + 60_000), failedLoginCount: failedLoginLimit },
+    });
+
+    try {
+      await expect(login(activeUsername, PIN)).rejects.toThrow(UnauthorizedError);
+    } finally {
+      await prisma.user.update({
+        where: { id: activeUserId },
+        data: { lockedUntil: null, failedLoginCount: 0 },
+      });
+    }
+  });
+
+  it('asks for a new password instead of a session when the hash is still a PIN', async () => {
+    await prisma.user.update({ where: { id: activeUserId }, data: { mustChangePassword: true } });
+
+    try {
+      await expect(login(activeUsername, PIN)).rejects.toBeInstanceOf(MustChangePasswordError);
+    } finally {
+      await prisma.user.update({ where: { id: activeUserId }, data: { mustChangePassword: false } });
+    }
   });
 
   it('throws the SAME uniform message across all four failure modes (no user enumeration)', async () => {

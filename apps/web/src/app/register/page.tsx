@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-import { registerSchema } from '@shop/shared';
+import { passwordMinimumLength, registerSchema } from '@shop/shared';
 
 import { SocialSignIn } from '@/components/SocialSignIn';
 import { Button } from '@/components/ui/Button';
@@ -34,7 +34,7 @@ export default function RegisterPage() {
   const [shopName, setShopName] = useState('');
   const [ownerName, setOwnerName] = useState('');
   const [username, setUsername] = useState('');
-  const [pin, setPin] = useState('');
+  const [password, setPassword] = useState('');
 
   const { fieldErrors, submitError, isSubmitting, run } = useZodSubmit(
     registerSchema,
@@ -48,7 +48,7 @@ export default function RegisterPage() {
       shopName: shopName.trim(),
       ownerName: ownerName.trim(),
       username: username.trim(),
-      pin,
+      password,
     });
   }
 
@@ -87,17 +87,13 @@ export default function RegisterPage() {
             error={fieldErrors.username}
           />
           <Input
-            label="PIN"
+            label="Password"
             type="password"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            autoComplete="off"
-            maxLength={6}
-            hint="6 digits"
-            className="text-center font-mono tracking-[0.4em]"
-            value={pin}
-            onChange={(event) => setPin(event.target.value.replace(/\D/g, ''))}
-            error={fieldErrors.pin}
+            autoComplete="new-password"
+            hint={`At least ${passwordMinimumLength} characters, not only digits`}
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            error={fieldErrors.password}
           />
 
           <Button type="submit" variant="primary" size="lg" isLoading={isSubmitting} className="mt-2 w-full">

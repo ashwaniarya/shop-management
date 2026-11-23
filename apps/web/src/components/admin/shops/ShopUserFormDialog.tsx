@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { useZodSubmit } from '@/hooks/useZodSubmit';
 import { createShopUser, updateShopUser } from '@/lib/api';
-import { userRoleSchema, userCreateSchema, userUpdateSchema, type User, type UserRole } from '@shop/shared';
+import { passwordMinimumLength, userRoleSchema, userCreateSchema, userUpdateSchema, type User, type UserRole } from '@shop/shared';
 
 const ROLE_OPTIONS = userRoleSchema.options;
 
@@ -55,7 +55,7 @@ function ShopUserForm({
   const [phone, setPhone] = useState(user?.phone ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
   const [username, setUsername] = useState(user?.username ?? '');
-  const [pin, setPin] = useState('');
+  const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>(user?.role ?? 'STAFF');
 
   const closeAfterSave = () => {
@@ -77,7 +77,7 @@ function ShopUserForm({
       phone: nullableOrTrimmed(phone),
       email: nullableOrTrimmed(email),
       username: undefinedOrTrimmed(username),
-      pin: pin === '' ? undefined : pin,
+      password: password === '' ? undefined : password,
       role,
     });
   }
@@ -125,18 +125,18 @@ function ShopUserForm({
             className="font-mono"
           />
           <Input
-            label="PIN"
+            label="Password"
             type="password"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            autoComplete="off"
-            maxLength={6}
+            autoComplete="new-password"
             placeholder={user ? 'Unchanged' : 'Optional'}
-            hint={user ? '4–6 digits — leave blank to keep the current PIN' : '4–6 digits — leave blank to set up login later'}
-            className="text-center font-mono tracking-[0.4em]"
-            value={pin}
-            onChange={(event) => setPin(event.target.value.replace(/\D/g, ''))}
-            error={fieldErrors.pin}
+            hint={
+              user
+                ? `At least ${passwordMinimumLength} characters — leave blank to keep the current password`
+                : `At least ${passwordMinimumLength} characters — leave blank to set up login later`
+            }
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            error={fieldErrors.password}
           />
         </div>
       </div>

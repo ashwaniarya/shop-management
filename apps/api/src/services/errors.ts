@@ -29,6 +29,17 @@ export class UnauthorizedError extends Error {
   }
 }
 
+// The PIN matched, but this account must pick a password before it gets a session.
+export class MustChangePasswordError extends Error {
+  readonly upgradeToken: string;
+
+  constructor(upgradeToken: string) {
+    super('Choose a password to finish sign-in');
+    this.name = 'MustChangePasswordError';
+    this.upgradeToken = upgradeToken;
+  }
+}
+
 export class ForbiddenError extends Error {
   constructor(message: string) {
     super(message);

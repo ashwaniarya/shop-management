@@ -270,6 +270,12 @@ model User {
   verifiedEmail String? @unique @map("verified_email")
   username     String?  @unique
   passwordHash String?  @map("password_hash")
+  // Bumped on logout and password change so older JWTs die.
+  tokenVersion Int      @default(0) @map("token_version")
+  failedLoginCount Int  @default(0) @map("failed_login_count")
+  lockedUntil  DateTime? @map("locked_until")
+  // True while password_hash is still a PIN. Login then asks for a real password.
+  mustChangePassword Boolean @default(false) @map("must_change_password")
   role         UserRole
   isActive     Boolean  @default(true) @map("is_active")
   createdAt    DateTime @default(now()) @map("created_at")

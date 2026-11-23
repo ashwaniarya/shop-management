@@ -1,6 +1,7 @@
 // Behavioural test: the public OAuth endpoints. Only the code exchange with the identity
 // provider is stubbed; account resolution and the session handoff run against the real
 // database.
+import { sessionCookieName } from '@shop/shared';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -229,17 +230,18 @@ describe('oauth router', () => {
         expect(findSetCookie(response, 'oauth_session')).toMatch(/^oauth_session=;.*Expires=Thu, 01 Jan 1970/);
       });
 
-      it('hands back the session token from the callback and clears the cookie', async () => {
+      it('sets the session cookie from the callback and clears the handoff cookie', async () => {
         const handoffCookie = handoffCookieFromCallback();
 
         const response = await request(app).post(SESSION_COOKIE_PATH).set('Cookie', handoffCookie);
 
-        expect(response.status).toBe(200);
-        expect(response.body).toEqual({ token: handoffCookie.slice('oauth_session='.length) });
+        expect(response.status).toBe(204);
+        const setCookie = findSetCookie(response, sessionCookieName);
+        expect(setCookie).toContain('HttpOnly');
         const signedInIdentity = await prisma.userIdentity.findUniqueOrThrow({
           where: { provider_providerUserId: { provider: 'google', providerUserId } },
         });
-        expect(verifyToken(response.body.token).sub).toBe(signedInIdentity.userId);
+        expect(verifyToken(readCookieValue(setCookie!)).sub).toBe(signedInIdentity.userId);
 
         const clearingCookie = findSetCookie(response, 'oauth_session');
         expect(clearingCookie).toMatch(/^oauth_session=;.*Expires=Thu, 01 Jan 1970/);

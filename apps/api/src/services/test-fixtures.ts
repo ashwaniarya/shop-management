@@ -2,7 +2,7 @@ import type { Part, PrismaClient, User, UserRole } from '@prisma/client';
 
 import { normalizeNumber } from '../lib/normalize';
 import { prisma } from '../lib/prisma';
-import { hashPin, signToken } from './auth';
+import { hashPassword, signToken } from './auth';
 
 export interface CatalogFixture {
   manufacturerId: number;
@@ -48,7 +48,7 @@ export interface UserWithCredentialsInput {
 }
 
 export async function createUserWithCredentials(input: UserWithCredentialsInput): Promise<User> {
-  const passwordHash = await hashPin(input.pin);
+  const passwordHash = await hashPassword(input.pin);
   return prisma.user.create({
     data: {
       shopId: input.shopId,
