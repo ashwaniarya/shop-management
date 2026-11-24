@@ -268,6 +268,33 @@ describe('parts router', () => {
       expect(response.status).toBe(404);
     });
 
+    it('auto-generates a SKU when none is supplied', async () => {
+      const response = await authApi.post('/api/v1/parts').send({
+        manufacturerId,
+        manufacturerPartNumber: `MPN-AUTOSKU-${ts}`,
+        name: 'Auto SKU',
+        categoryId,
+      });
+
+      expect(response.status).toBe(201);
+      const created = partSchema.parse(response.body);
+      partIds.push(created.id);
+      expect(created.sku).toMatch(/^[A-Z0-9]+-[2-9A-HJ-NP-Z]{6}$/);
+    });
+
+    it('gives two SKU-less parts distinct auto SKUs', async () => {
+      const send = (mpn: string) =>
+        authApi
+          .post('/api/v1/parts')
+          .send({ manufacturerId, manufacturerPartNumber: mpn, name: 'Auto SKU', categoryId });
+
+      const first = await send(`MPN-AUTOSKU-A-${ts}`);
+      const second = await send(`MPN-AUTOSKU-B-${ts}`);
+      partIds.push(first.body.id, second.body.id);
+
+      expect(first.body.sku).not.toBe(second.body.sku);
+    });
+
     it('returns 409 CONFLICT when creating a part with a duplicate sku', async () => {
       const sku = `SKU-DUP-${ts}`;
       const first = await authApi

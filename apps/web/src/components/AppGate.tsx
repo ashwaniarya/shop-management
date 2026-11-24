@@ -8,8 +8,9 @@ import { LoadingBlock } from '@/components/ui/LoadingRow';
 import { useAuth } from '@/context/AuthContext';
 import { ShopProvider } from '@/context/ShopContext';
 
-// Reachable while signed out — everything else redirects to /login.
-const PUBLIC_PATHS = new Set(['/login', '/register']);
+// Reachable while signed out — everything else redirects to /login. /auth/callback is
+// public because it is where the OAuth redirect lands, before a session exists.
+const PUBLIC_PATHS = new Set(['/login', '/register', '/auth/callback']);
 
 export function AppGate({ children }: { children: ReactNode }) {
   const pathname = usePathname();

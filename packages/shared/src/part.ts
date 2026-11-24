@@ -19,7 +19,9 @@ export const partSchema = z.object({
 export type Part = z.infer<typeof partSchema>;
 
 export const partCreateSchema = z.object({
-  sku: z.string().min(1, 'sku must not be empty'),
+  // Optional: when omitted the server auto-generates a unique SKU. A supplied value must
+  // still be non-empty — send nothing (not '') to opt into generation.
+  sku: z.string().min(1, 'sku must not be empty').optional(),
   manufacturerId: z.number().int(),
   manufacturerPartNumber: z.string().min(1, 'manufacturerPartNumber must not be empty'),
   name: z.string().min(1, 'name must not be empty'),

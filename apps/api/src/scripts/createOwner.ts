@@ -1,3 +1,5 @@
+import { passwordSchema } from '@shop/shared';
+
 import { prisma } from '../lib/prisma';
 import { createShopWithOwner } from '../services/auth';
 
@@ -7,19 +9,18 @@ import { createShopWithOwner } from '../services/auth';
 // and one OWNER from environment variables. It is safe to re-run: it no-ops the
 // moment any user exists, and it never deletes data (unlike the dev seed).
 
-const PIN_PATTERN = /^\d{4,6}$/;
-
 async function bootstrapOwner(): Promise<void> {
   const username = process.env.BOOTSTRAP_OWNER_USERNAME?.trim();
-  const pin = process.env.BOOTSTRAP_OWNER_PIN?.trim();
+  const password = process.env.BOOTSTRAP_OWNER_PASSWORD?.trim();
   const ownerName = process.env.BOOTSTRAP_OWNER_NAME?.trim() || 'Shop Owner';
   const shopName = process.env.BOOTSTRAP_SHOP_NAME?.trim() || 'My Shop';
 
-  if (!username || !pin) {
-    throw new Error('BOOTSTRAP_OWNER_USERNAME and BOOTSTRAP_OWNER_PIN must both be set');
+  if (!username || !password) {
+    throw new Error('BOOTSTRAP_OWNER_USERNAME and BOOTSTRAP_OWNER_PASSWORD must both be set');
   }
-  if (!PIN_PATTERN.test(pin)) {
-    throw new Error('BOOTSTRAP_OWNER_PIN must be 4 to 6 digits');
+  const parsedPassword = passwordSchema.safeParse(password);
+  if (!parsedPassword.success) {
+    throw new Error('BOOTSTRAP_OWNER_PASSWORD must be at least 10 characters and not digits only');
   }
 
   const existingUserCount = await prisma.user.count();
@@ -28,7 +29,7 @@ async function bootstrapOwner(): Promise<void> {
     return;
   }
 
-  const { user } = await createShopWithOwner({ shopName, ownerName, username, pin });
+  const { user } = await createShopWithOwner({ shopName, ownerName, username, password: parsedPassword.data });
 
   console.log(`[bootstrap-owner] Created shop "${shopName}" and OWNER "${username}" (user #${user.id}).`);
 }

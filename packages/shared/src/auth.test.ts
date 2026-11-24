@@ -2,41 +2,48 @@
 import { describe, expect, it } from 'vitest';
 
 import { authUserSchema, loginSchema, registerSchema } from './auth';
+import { passwordSchema } from './authPolicy';
+
+const validPassword = 'workshop-pass';
+
+describe('passwordSchema', () => {
+  it('rejects a 4-digit PIN and a digits-only 10 character secret', () => {
+    expect(passwordSchema.safeParse('1234').success).toBe(false);
+    expect(passwordSchema.safeParse('1234567890').success).toBe(false);
+  });
+
+  it('accepts 10 or more characters that are not only digits', () => {
+    expect(passwordSchema.safeParse(validPassword).success).toBe(true);
+  });
+});
 
 describe('loginSchema', () => {
-  it('accepts a valid username and pin', () => {
-    expect(loginSchema.safeParse({ username: 'suresh', pin: '1234' }).success).toBe(true);
+  it('accepts a password and a legacy PIN', () => {
+    expect(loginSchema.safeParse({ username: 'suresh', password: validPassword }).success).toBe(true);
+    expect(loginSchema.safeParse({ username: 'suresh', password: '1234' }).success).toBe(true);
   });
 
   it('rejects an empty username', () => {
-    expect(loginSchema.safeParse({ username: '', pin: '1234' }).success).toBe(false);
+    expect(loginSchema.safeParse({ username: '', password: validPassword }).success).toBe(false);
   });
 
-  it('rejects a pin shorter than 4 digits', () => {
-    expect(loginSchema.safeParse({ username: 'suresh', pin: '123' }).success).toBe(false);
-  });
-
-  it('rejects a pin longer than 6 digits', () => {
-    expect(loginSchema.safeParse({ username: 'suresh', pin: '1234567' }).success).toBe(false);
-  });
-
-  it('rejects a non-numeric pin', () => {
-    expect(loginSchema.safeParse({ username: 'suresh', pin: 'abcd' }).success).toBe(false);
+  it('rejects a secret that is neither a password nor a 4–6 digit PIN', () => {
+    expect(loginSchema.safeParse({ username: 'suresh', password: '123' }).success).toBe(false);
+    expect(loginSchema.safeParse({ username: 'suresh', password: 'abcdef' }).success).toBe(false);
   });
 });
 
 describe('registerSchema', () => {
-  const valid = { shopName: 'My Store', ownerName: 'Asha', username: 'asha_store', pin: '123456' };
+  const valid = { shopName: 'My Store', ownerName: 'Asha', username: 'asha_store', password: validPassword };
 
   it('accepts a valid registration', () => {
     expect(registerSchema.safeParse(valid).success).toBe(true);
   });
 
-  it('rejects a pin that is not exactly 6 digits', () => {
-    expect(registerSchema.safeParse({ ...valid, pin: '1234' }).success).toBe(false);
-    expect(registerSchema.safeParse({ ...valid, pin: '12345' }).success).toBe(false);
-    expect(registerSchema.safeParse({ ...valid, pin: '1234567' }).success).toBe(false);
-    expect(registerSchema.safeParse({ ...valid, pin: 'abcdef' }).success).toBe(false);
+  it('rejects a digits-only or too-short password', () => {
+    expect(registerSchema.safeParse({ ...valid, password: '1234' }).success).toBe(false);
+    expect(registerSchema.safeParse({ ...valid, password: '1234567890' }).success).toBe(false);
+    expect(registerSchema.safeParse({ ...valid, password: 'short' }).success).toBe(false);
   });
 
   it('rejects a username shorter than 3 characters', () => {

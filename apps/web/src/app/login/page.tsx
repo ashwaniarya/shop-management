@@ -2,15 +2,18 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
-import { loginSchema } from '@shop/shared';
+import { loginSchema, passwordMinimumLength, upgradePasswordSchema } from '@shop/shared';
 
+import { SocialSignIn } from '@/components/SocialSignIn';
 import { Button } from '@/components/ui/Button';
 import { FormError } from '@/components/ui/FormError';
 import { Input } from '@/components/ui/Input';
 import { useAuth } from '@/context/AuthContext';
 import { useZodSubmit } from '@/hooks/useZodSubmit';
+import { ApiError } from '@/lib/api';
+import { describeOAuthError } from '@/lib/oauth';
 
 function BrandMark() {
   return (
@@ -31,17 +34,48 @@ export default function LoginPage() {
   const auth = useAuth();
 
   const [username, setUsername] = useState('');
-  const [pin, setPin] = useState('');
+  const [password, setPassword] = useState('');
+  const [nextPassword, setNextPassword] = useState('');
+  const [mustSetPassword, setMustSetPassword] = useState(false);
+  const [oauthError, setOauthError] = useState<string | null>(null);
+
+  // Read from window rather than useSearchParams: that hook forces this page into a
+  // Suspense boundary at build time, and the value is only needed after hydration.
+  useEffect(() => {
+    const errorCode = new URLSearchParams(window.location.search).get('error');
+    if (errorCode) {
+      setOauthError(describeOAuthError(errorCode));
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
 
   const { fieldErrors, submitError, isSubmitting, run } = useZodSubmit(
     loginSchema,
-    ({ username, pin }) => auth.login(username, pin),
-    { onSuccess: () => router.replace('/') },
+    async ({ username, password }) => {
+      try {
+        await auth.login(username, password);
+        router.replace('/');
+      } catch (error) {
+        if (error instanceof ApiError && error.code === 'MUST_SET_PASSWORD') {
+          setMustSetPassword(true);
+          return;
+        }
+        throw error;
+      }
+    },
   );
+
+  const upgradeSubmit = useZodSubmit(upgradePasswordSchema, ({ password: next }) => auth.upgradePassword(next), {
+    onSuccess: () => router.replace('/'),
+  });
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    run({ username: username.trim(), pin });
+    if (mustSetPassword) {
+      upgradeSubmit.run({ password: nextPassword });
+      return;
+    }
+    run({ username: username.trim(), password });
   }
 
   return (
@@ -60,6 +94,12 @@ export default function LoginPage() {
           <span className="font-mono text-[10px] tracking-[0.16em] text-ink-500 uppercase">Terminal ready</span>
         </div>
 
+        {oauthError ? (
+          <div className="mb-4 rounded-sm border border-accent-800 bg-accent-950 px-3 py-2 text-center">
+            <FormError error={oauthError} />
+          </div>
+        ) : null}
+
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <Input
             label="Username"
@@ -69,28 +109,44 @@ export default function LoginPage() {
             onChange={(event) => setUsername(event.target.value)}
             error={fieldErrors.username}
           />
-          <Input
-            label="PIN"
-            type="password"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            autoComplete="off"
-            maxLength={6}
-            hint="4–6 digits"
-            className="text-center font-mono tracking-[0.4em]"
-            value={pin}
-            onChange={(event) => setPin(event.target.value.replace(/\D/g, ''))}
-            error={fieldErrors.pin}
-          />
+          {mustSetPassword ? (
+            <Input
+              label="New password"
+              type="password"
+              autoComplete="new-password"
+              hint={`At least ${passwordMinimumLength} characters, not only digits`}
+              value={nextPassword}
+              onChange={(event) => setNextPassword(event.target.value)}
+              error={upgradeSubmit.fieldErrors.password ?? upgradeSubmit.submitError}
+            />
+          ) : (
+            <Input
+              label="Password"
+              type="password"
+              autoComplete="current-password"
+              hint={`At least ${passwordMinimumLength} characters, or your current PIN once`}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              error={fieldErrors.password}
+            />
+          )}
 
-          <Button type="submit" variant="primary" size="lg" isLoading={isSubmitting} className="mt-2 w-full">
-            Sign in
+          <Button
+            type="submit"
+            variant="primary"
+            size="lg"
+            isLoading={isSubmitting || upgradeSubmit.isSubmitting}
+            className="mt-2 w-full"
+          >
+            {mustSetPassword ? 'Save password' : 'Sign in'}
           </Button>
 
           <div className="flex justify-center">
-            <FormError error={submitError} />
+            <FormError error={mustSetPassword ? null : submitError} />
           </div>
         </form>
+
+        <SocialSignIn label="Sign in with" />
 
         <p className="mt-5 text-center text-xs text-ink-400">
           New here?{' '}

@@ -44,6 +44,12 @@ describe('buildPartFormPayload', () => {
     });
   });
 
+  it('omits a blank sku so the server auto-generates one', () => {
+    expect(buildPartFormPayload(emptyValues).sku).toBeUndefined();
+    expect(buildPartFormPayload({ ...emptyValues, sku: '   ' }).sku).toBeUndefined();
+    expect(buildPartFormPayload({ ...emptyValues, sku: '  ABC-1  ' }).sku).toBe('ABC-1');
+  });
+
   it('omits empty required selects (undefined) and clears empty optionals (null)', () => {
     const payload = buildPartFormPayload(emptyValues);
 

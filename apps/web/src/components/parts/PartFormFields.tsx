@@ -114,10 +114,11 @@ export function PartFormFields({
   const skuField = (
     <Input
       label="SKU"
-      required
       value={values.sku}
       onChange={(event) => values.setSku(event.target.value)}
       error={fieldErrors.sku}
+      placeholder="Auto-generated"
+      hint="Leave blank to auto-generate"
       className="font-mono"
     />
   );

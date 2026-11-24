@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { passwordSchema } from './authPolicy';
+
 export const userRoleSchema = z.enum(['OWNER', 'MANAGER', 'STAFF']);
 export type UserRole = z.infer<typeof userRoleSchema>;
 
@@ -22,7 +24,7 @@ export const userCreateSchema = z.object({
   phone: z.string().nullable().optional(),
   email: z.string().nullable().optional(),
   username: z.string().min(3).optional(),
-  pin: z.string().regex(/^\d{4,6}$/, 'PIN must be 4–6 digits').optional(),
+  password: passwordSchema.optional(),
   role: userRoleSchema,
 });
 export type UserCreate = z.infer<typeof userCreateSchema>;

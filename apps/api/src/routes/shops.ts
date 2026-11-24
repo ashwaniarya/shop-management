@@ -9,7 +9,7 @@ import { prisma } from '../lib/prisma';
 import { serializeUser } from '../lib/serialize';
 import { requireRole, requireSameShop } from '../middleware/authorize';
 import { getQuery, validate, validateQuery } from '../middleware/validate';
-import { hashPin } from '../services/auth';
+import { hashPassword } from '../services/auth';
 import { NotFoundError } from '../services/errors';
 
 export const shopsRouter = Router();
@@ -114,14 +114,14 @@ shopsRouter.post(
     const shopId = requireIdParam(req.params.shopId, 'shopId');
     await requireShop(shopId);
 
-    // pin is never a Prisma column — it's hashed into passwordHash here and must
+    // password is never a Prisma column — it's hashed into passwordHash here and must
     // never reach prisma.user.create as-is.
-    const { pin, ...userData } = req.body;
+    const { password, ...userData } = req.body;
     const user = await prisma.user.create({
       data: {
         ...userData,
         shopId,
-        ...(pin !== undefined ? { passwordHash: await hashPin(pin) } : {}),
+        ...(password !== undefined ? { passwordHash: await hashPassword(password) } : {}),
       },
     });
 
@@ -151,12 +151,20 @@ shopsRouter.patch(
     const id = requireIdParam(req.params.id);
     await requireShopUser(shopId, id);
 
-    const { pin, ...userData } = req.body;
+    const { password, ...userData } = req.body;
     const user = await prisma.user.update({
       where: { id },
       data: {
         ...userData,
-        ...(pin !== undefined ? { passwordHash: await hashPin(pin) } : {}),
+        ...(password !== undefined
+          ? {
+              passwordHash: await hashPassword(password),
+              mustChangePassword: false,
+              tokenVersion: { increment: 1 },
+              failedLoginCount: 0,
+              lockedUntil: null,
+            }
+          : {}),
       },
     });
 

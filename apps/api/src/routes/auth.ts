@@ -1,11 +1,19 @@
-import { loginSchema, registerSchema } from '@shop/shared';
+import { loginSchema, registerSchema, upgradePasswordSchema } from '@shop/shared';
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 
 import { asyncHandler } from '../lib/asyncHandler';
+import {
+  sessionCookieName,
+  sessionCookieOptions,
+  upgradeCookieName,
+  upgradeCookieOptions,
+} from '../lib/authCookies';
 import { authenticate } from '../middleware/authenticate';
 import { validate } from '../middleware/validate';
-import { createShopWithOwner, login } from '../services/auth';
+import { prisma } from '../lib/prisma';
+import { createShopWithOwner, login, upgradePassword, verifyUpgradeToken } from '../services/auth';
+import { MustChangePasswordError, UnauthorizedError } from '../services/errors';
 
 // Rate-limit the public auth endpoints per client IP. Skipped under test so the
 // suite's many login/register calls from a single IP don't trip the limiter.
@@ -36,9 +44,20 @@ authRouter.post(
   loginLimiter,
   validate(loginSchema),
   asyncHandler(async (req, res) => {
-    const { token, user } = await login(req.body.username, req.body.pin);
-
-    res.json({ token, user });
+    try {
+      const { token, user } = await login(req.body.username, req.body.password);
+      res.cookie(sessionCookieName, token, sessionCookieOptions());
+      res.json({ user });
+    } catch (error) {
+      if (error instanceof MustChangePasswordError) {
+        res.cookie(upgradeCookieName, error.upgradeToken, upgradeCookieOptions());
+        res.status(409).json({
+          error: { code: 'MUST_SET_PASSWORD', message: error.message },
+        });
+        return;
+      }
+      throw error;
+    }
   }),
 );
 
@@ -47,9 +66,26 @@ authRouter.post(
   registerLimiter,
   validate(registerSchema),
   asyncHandler(async (req, res) => {
-    const result = await createShopWithOwner(req.body);
+    const { token, user } = await createShopWithOwner(req.body);
+    res.cookie(sessionCookieName, token, sessionCookieOptions());
+    res.status(201).json({ user });
+  }),
+);
 
-    res.status(201).json(result);
+authRouter.post(
+  '/auth/upgrade-password',
+  loginLimiter,
+  validate(upgradePasswordSchema),
+  asyncHandler(async (req, res) => {
+    const upgradeCookie = req.cookies?.[upgradeCookieName];
+    if (typeof upgradeCookie !== 'string' || upgradeCookie === '') {
+      throw new UnauthorizedError('Password upgrade is invalid or expired');
+    }
+    const claims = verifyUpgradeToken(upgradeCookie);
+    const { token, user } = await upgradePassword(claims.sub, req.body.password);
+    res.clearCookie(upgradeCookieName, upgradeCookieOptions());
+    res.cookie(sessionCookieName, token, sessionCookieOptions());
+    res.json({ user });
   }),
 );
 
@@ -64,7 +100,12 @@ authRouter.get(
 authRouter.post(
   '/auth/logout',
   authenticate,
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
+    await prisma.user.update({
+      where: { id: req.user!.id },
+      data: { tokenVersion: { increment: 1 } },
+    });
+    res.clearCookie(sessionCookieName, sessionCookieOptions());
     res.status(204).end();
   }),
 );

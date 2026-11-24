@@ -1,8 +1,8 @@
 // ⚠️ DESTRUCTIVE — DEV / FIRST-RUN ONLY. This seed deleteMany()s every table before
-// inserting demo data, and its PINs are public (owner/1111 …). Never run it against a
-// real deployment. To provision the first login on a deployed database use
-// `pnpm --filter api bootstrap:owner` (createOwner) instead. See docs/deploy-railway.md.
-import { formatInvoiceNumber } from '@shop/shared';
+// inserting demo data. Demo passwords come from SEED_PASSWORD and are not stored here.
+// Never run it against a real deployment. To provision the first login on a deployed
+// database use `pnpm --filter api bootstrap:owner` (createOwner) instead.
+import { bcryptSaltRounds, formatInvoiceNumber, passwordSchema } from '@shop/shared';
 import { Prisma, RefType, StockTransactionType, UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
@@ -78,16 +78,19 @@ interface InvoiceLineRow {
   lineTotal: number;
 }
 
-// Cost 10 matches hashPin() in src/services/auth.ts. Hashed with bcryptjs
-// directly (not that module) so the seed stays self-contained and doesn't
+// Hashed with bcryptjs directly (not the auth service) so the seed doesn't
 // pull in the auth service's fail-fast JWT_SECRET check.
-const SEED_PIN_HASH_COST = 10;
-
-async function hashSeedPin(pin: string): Promise<string> {
-  return bcrypt.hash(pin, SEED_PIN_HASH_COST);
+function requireSeedPassword(): string {
+  const parsed = passwordSchema.safeParse(process.env.SEED_PASSWORD);
+  if (!parsed.success) {
+    throw new Error('SEED_PASSWORD must be set to a password of at least 10 characters and not digits only');
+  }
+  return parsed.data;
 }
 
 async function main() {
+  const seedPasswordHash = await bcrypt.hash(requireSeedPassword(), bcryptSaltRounds);
+
   await prisma.$transaction(
     async (tx) => {
       // FK-safe delete order: children before parents, respecting every onDelete: Restrict relation
@@ -561,13 +564,9 @@ async function main() {
         }),
       };
 
-      // Demo logins (POST /auth/login with { username, pin }), one per role:
-      //   owner    / 1111  — Main shop    · OWNER
-      //   manager  / 2222  — Main shop    · MANAGER
-      //   staff    / 3333  — Main shop    · STAFF
-      //   highway  / 4444  — Highway shop · OWNER
-      // highwaystaff/5555 also seeded (Highway · STAFF) for a second-user
-      // scenario at that shop; not one of the primary demo accounts above.
+      // Demo logins use SEED_PASSWORD for every username below:
+      //   owner, manager, staff — Main shop
+      //   highway (OWNER) and highwaystaff (STAFF) — Highway shop
       const users = {
         mainOwner: await tx.user.create({
           data: {
@@ -576,7 +575,7 @@ async function main() {
             phone: '+91 98765 11111',
             email: 'suresh.arya@aryaautoparts.in',
             username: 'owner',
-            passwordHash: await hashSeedPin('1111'),
+            passwordHash: seedPasswordHash,
             role: UserRole.OWNER,
           },
         }),
@@ -587,7 +586,7 @@ async function main() {
             phone: '+91 98765 55555',
             email: 'vikram.joshi@aryaautoparts.in',
             username: 'manager',
-            passwordHash: await hashSeedPin('2222'),
+            passwordHash: seedPasswordHash,
             role: UserRole.MANAGER,
           },
         }),
@@ -598,7 +597,7 @@ async function main() {
             phone: '+91 98765 22222',
             email: 'ramesh.kumar@aryaautoparts.in',
             username: 'staff',
-            passwordHash: await hashSeedPin('3333'),
+            passwordHash: seedPasswordHash,
             role: UserRole.STAFF,
           },
         }),
@@ -609,7 +608,7 @@ async function main() {
             phone: '+91 98765 33333',
             email: 'meena.arya@aryaautoparts.in',
             username: 'highway',
-            passwordHash: await hashSeedPin('4444'),
+            passwordHash: seedPasswordHash,
             role: UserRole.OWNER,
           },
         }),
@@ -620,7 +619,7 @@ async function main() {
             phone: '+91 98765 44444',
             email: 'sanjay.patil@aryaautoparts.in',
             username: 'highwaystaff',
-            passwordHash: await hashSeedPin('5555'),
+            passwordHash: seedPasswordHash,
             role: UserRole.STAFF,
           },
         }),

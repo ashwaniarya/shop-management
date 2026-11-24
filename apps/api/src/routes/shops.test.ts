@@ -152,13 +152,13 @@ describe('shops router', () => {
       expect(response.status).toBe(404);
     });
 
-    it('provisions a login: creating a user with username+pin returns 201 with username and no passwordHash, and that user can then obtain a token from /auth/login', async () => {
+    it('provisions a login: creating a user with username+password returns 201 with username and no passwordHash, and that user can then sign in', async () => {
       const username = `shops-provisioned-${ts}`;
-      const pin = '4321';
+      const password = 'staff-pass-1';
 
       const createResponse = await authApi
         .post(`/api/v1/shops/${shopId}/users`)
-        .send({ name: `Provisioned Staff ${ts}`, role: 'STAFF', username, pin });
+        .send({ name: `Provisioned Staff ${ts}`, role: 'STAFF', username, password });
 
       expect(createResponse.status).toBe(201);
       const created = userSchema.parse(createResponse.body);
@@ -166,10 +166,9 @@ describe('shops router', () => {
       expect(createResponse.body).not.toHaveProperty('passwordHash');
       expect(createResponse.body).not.toHaveProperty('pin');
 
-      // Proves the hash round-trips: the pin sent on create is the pin this user logs in with.
-      const loginResponse = await request(app).post('/api/v1/auth/login').send({ username, pin });
+      const loginResponse = await request(app).post('/api/v1/auth/login').send({ username, password });
       expect(loginResponse.status).toBe(200);
-      expect(typeof loginResponse.body.token).toBe('string');
+      expect(loginResponse.body).not.toHaveProperty('token');
       expect(loginResponse.body.user.id).toBe(created.id);
     });
 
@@ -178,12 +177,12 @@ describe('shops router', () => {
 
       const firstResponse = await authApi
         .post(`/api/v1/shops/${shopId}/users`)
-        .send({ name: `First ${ts}`, role: 'STAFF', username, pin: '1111' });
+        .send({ name: `First ${ts}`, role: 'STAFF', username, password: 'staff-pass-1' });
       expect(firstResponse.status).toBe(201);
 
       const secondResponse = await authApi
         .post(`/api/v1/shops/${shopId}/users`)
-        .send({ name: `Second ${ts}`, role: 'STAFF', username, pin: '2222' });
+        .send({ name: `Second ${ts}`, role: 'STAFF', username, password: 'staff-pass-2' });
       expect(secondResponse.status).toBe(409);
     });
   });

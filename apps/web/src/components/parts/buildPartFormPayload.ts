@@ -18,7 +18,8 @@ export interface PartFormValues {
 // PartFormValues since only edit mode has it.
 export function buildPartFormPayload(values: PartFormValues) {
   return {
-    sku: values.sku.trim(),
+    // Blank → omit it so the server auto-generates the SKU.
+    sku: values.sku.trim() === '' ? undefined : values.sku.trim(),
     name: values.name.trim(),
     manufacturerId: values.manufacturerId === '' ? undefined : values.manufacturerId,
     manufacturerPartNumber: values.manufacturerPartNumber.trim(),
